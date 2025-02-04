@@ -35,7 +35,7 @@ class RelationshipLevel(Enum):
     LIKED = 1
     LOVED = 2
 
-# Updated advantages between elements (feel free to adjust)
+# Updated elemental advantages (adjust as desired)
 ADVANTAGES = {
     Element.FIRE.value: [Element.ICE.value, Element.POISON.value, Element.NATURE.value],
     Element.WATER.value: [Element.FIRE.value, Element.LIGHTNING.value],
@@ -69,14 +69,32 @@ class Item:
 
     def __str__(self):
         stats = []
-        if self.attack > 0: stats.append(f"ATK +{self.attack}")
-        if self.defense > 0: stats.append(f"DEF +{self.defense}")
-        if self.magic > 0: stats.append(f"MAG +{self.magic}")
+        if self.attack > 0:
+            stats.append(f"ATK +{self.attack}")
+        if self.defense > 0:
+            stats.append(f"DEF +{self.defense}")
+        if self.magic > 0:
+            stats.append(f"MAG +{self.magic}")
         return f"{self.name} ({', '.join(stats)})"
 
+# New: Consumable Items (e.g., Health Potions, Throwable items, etc.)
+class Consumable(Item):
+    def __init__(self, name: str, heal_value: int = 0, throw_damage: int = 0):
+        super().__init__(name)
+        self.heal_value = heal_value
+        self.throw_damage = throw_damage
+
+    def __str__(self):
+        if self.heal_value > 0:
+            return f"{self.name} (Heals {self.heal_value} HP)"
+        elif self.throw_damage > 0:
+            return f"{self.name} (Throw Damage {self.throw_damage})"
+        else:
+            return self.name
+
+# Base Character classes
 class Character:
-    def __init__(self, name: str, health: int, attack: int, defense: int, 
-                 magic: int, element: Element, alignment: Alignment):
+    def __init__(self, name: str, health: int, attack: int, defense: int, magic: int, element: Element, alignment: Alignment):
         self.name = name
         self.health = health
         self.max_health = health
@@ -100,11 +118,9 @@ class Character:
     def update_relationship(self, other: 'Character', change: int, reason: str):
         if other.name not in self.relationships:
             self.relationships[other.name] = Relationship()
-        
         rel = self.relationships[other.name]
         rel.progress += change
         rel.history.append(f"{reason} ({'+' if change > 0 else ''}{change})")
-        
         if rel.progress >= 100:
             rel.level = RelationshipLevel(rel.level.value + 1)
             rel.progress = 0
@@ -120,9 +136,45 @@ class Player(Character):
             'Rogue': (90, 10, 8, 12)
         }
         super().__init__(name, *base_stats[char_class], element, alignment)
-        self.char_class = char_class  # For later reference
-        self.party: List['NPC'] = []  # Starts empty; recruit later.
+        self.char_class = char_class
+        self.party: List['NPC'] = []
         self.completed_quests: int = 0
+
+    def check_level_up(self):
+        # Required EXP = 100 + (level - 1) * 20
+        required_exp = 100 + (self.level - 1) * 20
+        leveled_up = False
+        while self.exp >= required_exp:
+            self.exp -= required_exp
+            self.level += 1
+            leveled_up = True
+            # Increase key stats on level up
+            self.max_health += 10
+            self.health = self.max_health
+            self.attack += 2
+            self.defense += 2
+            self.magic_power += 2
+            print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
+            required_exp = 100 + (self.level - 1) * 20
+        if leveled_up:
+            print(f"EXP remaining: {self.exp}/{required_exp}")
+
+    def use_consumable(self, consumable: Consumable):
+        if consumable.heal_value > 0:
+            healed = min(consumable.heal_value, self.max_health - self.health)
+            self.health += healed
+            print(f"{self.name} uses {consumable.name} and restores {healed} HP!")
+        # Additional consumable effects (e.g., throw damage) can be added here.
+
+    def auto_use_consumables(self):
+        # Auto–use a health potion if health falls below 30% of maximum
+        if self.health < 0.3 * self.max_health:
+            for item in self.inventory:
+                if isinstance(item, Consumable) and item.heal_value > 0:
+                    print(f"\n[Auto-Use] {self.name}'s health is low ({self.health}/{self.max_health}).")
+                    self.use_consumable(item)
+                    self.inventory.remove(item)
+                    break
 
 class NPC(Character):
     def __init__(self, name: str, element: Element, alignment: Alignment):
@@ -146,7 +198,7 @@ class WorldGenerator:
     @staticmethod
     def generate_npc() -> NPC:
         name = random.choice([
-            "Aelien", "Branwen", "Caelum", "Drystan", "Eirian", 
+            "Aelien", "Branwen", "Caelum", "Drystan", "Eirian",
             "Faelar", "Gwyneth", "Haelia", "Ithilien", "Kyros"
         ])
         return NPC(
@@ -159,7 +211,6 @@ class WorldGenerator:
     def generate_quest(player_level: int) -> 'Quest':
         quest_types = ['combat', 'gather', 'rescue', 'diplomacy']
         quest_type = random.choices(quest_types, weights=[40, 30, 20, 10])[0]
-        
         templates = {
             'combat': [
                 f"Defeat the {random.choice(['Corrupted', 'Fallen'])} {random.choice(['Knight', 'Mage', 'Titan'])}",
@@ -178,10 +229,9 @@ class WorldGenerator:
                 f"Convince the {random.choice(['mages', 'druids', 'mercenaries'])} to join the cause"
             ]
         }
-        
         return Quest(
             description=random.choice(templates[quest_type]),
-            difficulty=min(max(player_level + random.randint(-2,2), 1), 20),
+            difficulty=min(max(player_level + random.randint(-2, 2), 1), 20),
             quest_type=quest_type,
             rewards={
                 'exp': player_level * 50,
@@ -196,17 +246,15 @@ class ItemGenerator:
         prefixes = ["Ancient", "Forgotten", "Divine", "Cursed", "Enchanted"]
         suffixes = ["Power", "Wisdom", "the Ages", "Destiny", "Elements"]
         item_types = ["Sword", "Amulet", "Ring", "Tome", "Armor", "Shield"]
-        
         return Item(
             name=f"{random.choice(prefixes)} {random.choice(item_types)} of {random.choice(suffixes)}",
-            attack=random.randint(1, max(1, level//2)),
-            defense=random.randint(1, max(1, level//3)),
-            magic=random.randint(1, max(1, level//2))
+            attack=random.randint(1, max(1, level // 2)),
+            defense=random.randint(1, max(1, level // 3)),
+            magic=random.randint(1, max(1, level // 2))
         )
 
 # Extended Mob Properties and Creation Functions
 def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
-    """Return possible elements and alignments for a given mob type."""
     mob_properties = {
         "Slime": {
             "elements": [Element.WATER, Element.POISON, Element.NATURE],
@@ -268,7 +316,6 @@ def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
     return mob_properties.get(mob_name, default_properties)
 
 def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defense: int, enemy_magic: int) -> NPC:
-    """Create an enemy NPC with appropriate element and alignment, plus some stat variation."""
     properties = get_mob_properties(mob_name)
     element = random.choice(properties["elements"])
     alignment = random.choice(properties["alignments"])
@@ -278,12 +325,55 @@ def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defe
     enemy.attack = enemy_attack
     enemy.defense = enemy_defense
     enemy.magic_power = enemy_magic
-    # Apply a ±10% random variation to stats.
+    # Apply a ±10% variation to stats.
     for stat in ['health', 'max_health', 'attack', 'defense', 'magic_power']:
         variation = random.uniform(0.9, 1.1)
         current_value = getattr(enemy, stat)
         setattr(enemy, stat, int(current_value * variation))
     return enemy
+
+# Shop System
+class Shop:
+    def __init__(self):
+        # Define a shop inventory: each entry is a dict with an "item" and its "price"
+        self.inventory = [
+            {"item": Item("Iron Sword", attack=5), "price": 100},
+            {"item": Item("Steel Armor", defense=5), "price": 150},
+            {"item": Item("Magic Wand", magic=7), "price": 120},
+            {"item": Consumable("Health Potion", heal_value=50), "price": 50},
+            {"item": Item("Enchanted Shield", defense=4), "price": 130},
+            {"item": Item("Spell Tome", magic=5), "price": 110},
+        ]
+
+    def enter_shop(self, player: Player):
+        print("\n*** Welcome to the Shop! ***")
+        print(f"Your Gold: {player.gold}")
+        while True:
+            for i, entry in enumerate(self.inventory, 1):
+                item = entry["item"]
+                price = entry["price"]
+                print(f"{i}. {item} - Price: {price} gold")
+            print(f"{len(self.inventory)+1}. Exit Shop")
+            choice = input("Choose an item to buy (number): ")
+            if not choice.isdigit():
+                print("Invalid input.")
+                continue
+            choice = int(choice)
+            if choice == len(self.inventory)+1:
+                print("Exiting shop.")
+                break
+            if 1 <= choice <= len(self.inventory):
+                entry = self.inventory[choice - 1]
+                price = entry["price"]
+                item = entry["item"]
+                if player.gold >= price:
+                    player.gold -= price
+                    player.inventory.append(item)
+                    print(f"You purchased {item.name}!")
+                else:
+                    print("Not enough gold!")
+            else:
+                print("Invalid selection.")
 
 # Game Systems
 class Quest:
@@ -305,18 +395,31 @@ class CombatSystem:
     def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
         print("\n--- COMBAT BEGINS ---")
         while any(c.alive for c in player_party) and any(e.alive for e in enemies):
+            # Player party turn
             for char in player_party:
-                if char.alive:
-                    target = random.choice([e for e in enemies if e.alive])
-                    damage = CombatSystem.calculate_damage(char, target)
-                    target.health = max(0, target.health - damage)
-                    print(f"{char.name} hits {target.name} for {damage} damage!")
+                if not char.alive:
+                    continue
+                if isinstance(char, Player):
+                    char.auto_use_consumables()
+                living_enemies = [e for e in enemies if e.alive]
+                if not living_enemies:
+                    break
+                target = random.choice(living_enemies)
+                damage = CombatSystem.calculate_damage(char, target)
+                target.health = max(0, target.health - damage)
+                print(f"{char.name} hits {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+            # Enemies turn
             for enemy in enemies:
-                if enemy.alive:
-                    target = random.choice([c for c in player_party if c.alive])
-                    damage = CombatSystem.calculate_damage(enemy, target)
-                    target.health = max(0, target.health - damage)
-                    print(f"{enemy.name} attacks {target.name} for {damage} damage!")
+                if not enemy.alive:
+                    continue
+                living_players = [c for c in player_party if c.alive]
+                if not living_players:
+                    break
+                target = random.choice(living_players)
+                damage = CombatSystem.calculate_damage(enemy, target)
+                target.health = max(0, target.health - damage)
+                print(f"{enemy.name} attacks {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+            # Check for deaths
             for char in player_party + enemies:
                 if char.health <= 0 and char.alive:
                     print(f"{char.name} has died!")
@@ -344,7 +447,8 @@ class Game:
         self.player: Optional[Player] = None
         self.world_npcs: List[NPC] = [WorldGenerator.generate_npc() for _ in range(20)]
         self.current_quest: Optional[Quest] = None
-    
+        self.shop = Shop()
+
     def character_creation(self):
         print("Welcome to Elemental Realms!\n")
         name = input("Enter your character's name: ")
@@ -352,7 +456,6 @@ class Game:
         if char_class not in ['Warrior', 'Mage', 'Rogue']:
             print("Invalid class! Defaulting to Warrior.")
             char_class = 'Warrior'
-        
         print("\nChoose element: " + ", ".join([e.value for e in Element]))
         element_input = input("Enter element: ").strip().capitalize()
         try:
@@ -360,7 +463,6 @@ class Game:
         except ValueError:
             print("Invalid element! Defaulting to Fire.")
             element = Element.FIRE
-        
         print("\nChoose alignment:")
         print(", ".join([a.value for a in Alignment]))
         alignment_input = input("Enter alignment: ").strip().replace(' ', '_').upper()
@@ -369,17 +471,19 @@ class Game:
         except KeyError:
             print("Invalid alignment! Defaulting to True Neutral.")
             alignment = Alignment.TRUE_NEUTRAL
-        
         self.player = Player(name, char_class, element, alignment)
         print(f"\nWelcome {self.player.name}, {self.player.alignment.value} {char_class} of {element.value}!")
-    
+        # Starting gold and a basic consumable for demonstration
+        self.player.gold = 200
+        self.player.inventory.append(Consumable("Health Potion", heal_value=50))
+
     def estimate_success_probability(self, quest: Quest) -> int:
         base = 50
         level_factor = (self.player.level - quest.difficulty) * 5
         attack_factor = (self.player.attack - 11) * 2
         chance = base + level_factor + attack_factor
         return max(5, min(95, chance))
-    
+
     def handle_recruitment(self):
         if random.random() < 0.4:
             npc = WorldGenerator.generate_npc()
@@ -389,7 +493,7 @@ class Game:
                 print(f"{npc.name} has joined your party!")
             else:
                 print(f"You decided not to recruit {npc.name}.")
-    
+
     def main_loop(self):
         while True:
             print("\n=== MAIN MENU ===")
@@ -399,8 +503,8 @@ class Game:
             print("4. Inventory")
             print("5. Travel")
             print("6. View Stats")
-            print("7. Quit")
-            
+            print("7. Shop")
+            print("8. Quit")
             choice = input("Choose: ")
             if choice == '1':
                 self.quest_system()
@@ -415,29 +519,29 @@ class Game:
             elif choice == '6':
                 self.view_stats()
             elif choice == '7':
+                self.shop.enter_shop(self.player)
+            elif choice == '8':
                 print("Thanks for playing!")
                 return
             else:
                 print("Invalid option. Try again.")
-    
+
     def quest_system(self):
         self.current_quest = WorldGenerator.generate_quest(self.player.level)
         print(f"\nNew Quest: {self.current_quest.description}")
         print(f"Difficulty: {self.current_quest.difficulty}")
         est = self.estimate_success_probability(self.current_quest)
         print(f"Estimated Success Chance: {est}%")
-        
         if self.player.party:
             print("\nYour party:")
             for npc in self.player.party:
                 interest = npc.quest_interest.get(self.current_quest.type, 0)
                 print(f"- {npc.name} ({interest}/10 interest)")
-        
         if input("Accept quest? (y/n): ").lower() == 'y':
             success = self.run_quest()
             self.current_quest.success = success
             self.handle_quest_outcome()
-    
+
     def run_quest(self) -> bool:
         enemies = [WorldGenerator.generate_npc() for _ in range(3)]
         print("\nYour party encounters enemies!")
@@ -450,11 +554,12 @@ class Game:
             self.player.exp += self.current_quest.rewards['exp']
             for item in self.current_quest.rewards['items']:
                 self.player.inventory.append(item)
+            self.player.check_level_up()
             return True
         else:
             print("\nQuest failed...")
             return False
-    
+
     def handle_quest_outcome(self):
         for npc in self.player.party.copy():
             RelationshipSystem.handle_shared_quest(self.player, npc, self.current_quest)
@@ -463,7 +568,7 @@ class Game:
                 self.player.party.remove(npc)
         if not self.player.party:
             self.handle_recruitment()
-    
+
     def party_management(self):
         if not self.player.party:
             print("\nYou currently have no party members.")
@@ -482,8 +587,8 @@ class Game:
             if action == 'd':
                 self.world_npcs.append(npc)
                 self.player.party.remove(npc)
-                print(f"{npc.name} has left the party")
-    
+                print(f"{npc.name} has left the party.")
+
     def relationship_browser(self):
         print("\n=== RELATIONSHIPS ===")
         combined = self.world_npcs + self.player.party
@@ -496,7 +601,7 @@ class Game:
             if input("Show history? (y/n): ").lower() == 'y':
                 for event in rel.history[-3:]:
                     print(f"- {event}")
-    
+
     def inventory_management(self):
         print("\n=== INVENTORY ===")
         if not self.player.inventory:
@@ -504,15 +609,26 @@ class Game:
             return
         for i, item in enumerate(self.player.inventory, 1):
             print(f"{i}. {item}")
-        choice = input("(u)se, (d)rop, (b)ack: ")
-        if choice == 'd':
+        choice = input("(u)se, (d)rop, (b)ack: ").lower()
+        if choice == 'u':
+            index = input("Enter item number to use: ")
+            if index.isdigit():
+                index = int(index) - 1
+                if 0 <= index < len(self.player.inventory):
+                    item = self.player.inventory[index]
+                    if isinstance(item, Consumable):
+                        self.player.use_consumable(item)
+                        self.player.inventory.pop(index)
+                    else:
+                        print("That item cannot be used right now.")
+        elif choice == 'd':
             index = input("Enter item number to drop: ")
             if index.isdigit():
                 index = int(index) - 1
                 if 0 <= index < len(self.player.inventory):
                     dropped_item = self.player.inventory.pop(index)
                     print(f"Dropped {dropped_item.name}")
-    
+
     def travel_system(self):
         print("\nYou set out to travel to a new area...")
         print("Choose your travel action:")
@@ -534,7 +650,7 @@ class Game:
             self.handle_recruitment()
         else:
             print("Unrecognized action. You wander without incident.")
-    
+
     def travel_help_someone(self):
         print("\nYou come across a villager in distress!")
         success = random.random() < 0.8
@@ -542,21 +658,22 @@ class Game:
             print("You help resolve the problem, earning gratitude and a small reward.")
             self.player.gold += random.randint(10, 30)
             self.player.exp += random.randint(20, 40)
+            self.player.check_level_up()
         else:
             print("Despite your efforts, the situation didn't improve much.")
-    
+
     def travel_solve_mystery(self):
         print("\nYou investigate strange happenings in a nearby forest.")
         chance = 0.5 + (self.player.level / 100)
         if random.random() < chance:
             print("Your keen senses uncover vital clues!")
             self.player.exp += random.randint(30, 50)
+            self.player.check_level_up()
         else:
             print("The mystery remains unsolved.")
-    
+
     def travel_farm_exp(self):
         print("\nYou head to a training area to farm experience.")
-        # Define locations with detailed mob info.
         farming_locations = {
             "Glistening Grove": {
                 "mob_name": "Slime",
@@ -624,7 +741,6 @@ class Game:
                 "base_exp": 90
             }
         }
-        # Let the player choose a location.
         print("\nAvailable Locations:")
         for i, (loc, data) in enumerate(farming_locations.items(), 1):
             print(f"{i}. {loc} - Mob: {data['mob_name']} | Multiplier: {data['difficulty_multiplier']} | Base EXP: {data['base_exp']}")
@@ -643,8 +759,6 @@ class Game:
         print(f"\nYou arrive at {location_name}.")
         mob_name = location_data['mob_name']
         enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
-        
-        # Determine enemy stats based on mob type.
         if mob_name == "Slime":
             enemy_health = 30 * enemy_level
             enemy_attack = 3 * enemy_level
@@ -715,12 +829,9 @@ class Game:
             enemy_attack = 4 * enemy_level
             enemy_defense = 2 * enemy_level
             enemy_magic = 2 * enemy_level
-        
-        # Create the enemy using the extended function (which assigns element, alignment, and variation).
         enemy = create_enemy(mob_name, enemy_health, enemy_attack, enemy_defense, enemy_magic)
         print(f"A wild {mob_name} (Level {enemy_level}) appears!")
         print(f"Stats -> HP: {enemy.health}, ATK: {enemy.attack}, DEF: {enemy.defense}, MAG: {enemy.magic_power}")
-        # (Optionally, here you could list status effects like Burn, Freeze, Drain based on the enemy.element)
         victory = CombatSystem.party_vs_enemies([self.player] + self.player.party, [enemy])
         if victory:
             print("You defeat the enemy!")
@@ -728,9 +839,10 @@ class Game:
             exp_reward = max(10, exp_reward)
             self.player.exp += exp_reward
             print(f"You gain {exp_reward} experience!")
+            self.player.check_level_up()
         else:
             print("You were overwhelmed and had to retreat.")
-    
+
     def travel_explore_dungeon(self):
         print("\nYou explore a mysterious dungeon filled with dangers and treasures.")
         enemies = [WorldGenerator.generate_npc() for _ in range(2)]
@@ -740,9 +852,14 @@ class Game:
             self.player.exp += random.randint(40, 60)
             self.player.gold += random.randint(30, 50)
             self.player.inventory.append(ItemGenerator.generate_item(self.player.level))
+            if random.random() < 0.5:
+                potion = Consumable("Health Potion", heal_value=50)
+                self.player.inventory.append(potion)
+                print("You found a Health Potion!")
+            self.player.check_level_up()
         else:
             print("The dungeon proved too perilous, and you barely escape.")
-    
+
     def view_stats(self):
         print("\n=== YOUR STATS ===")
         print(f"Name: {self.player.name}")
@@ -751,6 +868,8 @@ class Game:
         print(f"Alignment: {self.player.alignment.value}")
         print(f"Level: {self.player.level}")
         print(f"EXP: {self.player.exp}")
+        required_exp = 100 + (self.player.level - 1) * 20
+        print(f"Next Level in: {required_exp - self.player.exp} EXP")
         print(f"Gold: {self.player.gold}")
         print(f"Health: {self.player.health}/{self.player.max_health}")
         print(f"Attack: {self.player.attack}")
@@ -758,7 +877,7 @@ class Game:
         print(f"Magic: {self.player.magic_power}")
         print(f"Party Members: {len(self.player.party)}")
         print(f"Inventory Items: {len(self.player.inventory)}")
-    
+
 if __name__ == "__main__":
     game = Game()
     game.character_creation()
