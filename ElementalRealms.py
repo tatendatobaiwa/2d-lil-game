@@ -489,20 +489,79 @@ class Game:
             print("The mystery remains unsolved.")
     
     def travel_farm_exp(self):
-        print("\nYou spend time training and battling minor foes.")
-        # Simulate a mini combat that is easier than a full quest.
-        enemy = WorldGenerator.generate_npc()
-        print(f"A wild {enemy.name} appears for training!")
-        victory = CombatSystem.party_vs_enemies([self.player], [enemy])
-        if victory:
-            print("You win the skirmish and gain experience.")
-            self.player.exp += random.randint(20, 40)
+        print("\nYou head to a training area to farm experience.")
+        # Define farming locations with specific mobs and multipliers.
+        farming_locations = {
+            "Glistening Grove": {
+                "mob_name": "Slime",
+                "difficulty_multiplier": 0.8,
+                "base_exp": 20
+            },
+            "Crimson Cavern": {
+                "mob_name": "Goblin",
+                "difficulty_multiplier": 1.0,
+                "base_exp": 40
+            },
+            "Darkened Depths": {
+                "mob_name": "Shadow Beast",
+                "difficulty_multiplier": 1.2,
+                "base_exp": 60
+            }
+        }
+        location_name = random.choice(list(farming_locations.keys()))
+        location_data = farming_locations[location_name]
+        print(f"\nYou arrive at {location_name}.")
+        
+        # Calculate enemy level based on player's level and location difficulty.
+        enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
+        mob_name = location_data['mob_name']
+        
+        # Create enemy stats based on mob type.
+        if mob_name == "Slime":
+            enemy_health = 30 * enemy_level
+            enemy_attack = 3 * enemy_level
+            enemy_defense = 1 * enemy_level
+            enemy_magic = 1 * enemy_level
+        elif mob_name == "Goblin":
+            enemy_health = 50 * enemy_level
+            enemy_attack = 5 * enemy_level
+            enemy_defense = 3 * enemy_level
+            enemy_magic = 2 * enemy_level
+        elif mob_name == "Shadow Beast":
+            enemy_health = 70 * enemy_level
+            enemy_attack = 7 * enemy_level
+            enemy_defense = 4 * enemy_level
+            enemy_magic = 3 * enemy_level
         else:
-            print("You retreat after a tough encounter.")
+            enemy_health = 40 * enemy_level
+            enemy_attack = 4 * enemy_level
+            enemy_defense = 2 * enemy_level
+            enemy_magic = 2 * enemy_level
+        
+        # Create a custom enemy. Here, we use a dummy NPC with fixed element and alignment.
+        enemy = NPC(name=mob_name, element=Element.DARK, alignment=Alignment.CHAOTIC_EVIL)
+        enemy.health = enemy_health
+        enemy.max_health = enemy_health
+        enemy.attack = enemy_attack
+        enemy.defense = enemy_defense
+        enemy.magic_power = enemy_magic
+        
+        print(f"A wild {mob_name} (Level {enemy_level}) appears! (HP: {enemy.health}, ATK: {enemy.attack}, DEF: {enemy.defense})")
+        
+        # Simulate combat with the enemy.
+        victory = CombatSystem.party_vs_enemies([self.player] + self.player.party, [enemy])
+        if victory:
+            print("You defeat the enemy!")
+            # Scale exp reward: if enemy is much weaker than the player, reward is lower.
+            exp_reward = int(location_data['base_exp'] * (enemy_level / self.player.level))
+            exp_reward = max(10, exp_reward)
+            self.player.exp += exp_reward
+            print(f"You gain {exp_reward} experience!")
+        else:
+            print("You were overwhelmed by the enemy and had to retreat.")
     
     def travel_explore_dungeon(self):
         print("\nYou explore a mysterious dungeon filled with dangers and treasures.")
-        # Combine combat and exploration rewards.
         enemies = [WorldGenerator.generate_npc() for _ in range(2)]
         victory = CombatSystem.party_vs_enemies([self.player] + self.player.party, enemies)
         if victory:
