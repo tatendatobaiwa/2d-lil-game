@@ -4,14 +4,18 @@ import random
 import time
 from enum import Enum
 
-# Enums and Constants
+# Extended Enums and Constants
 class Element(Enum):
     FIRE = "Fire"
     WATER = "Water"
+    EARTH = "Earth"
     AIR = "Air"
     LIGHT = "Light"
-    EARTH = "Earth"
     DARK = "Dark"
+    NATURE = "Nature"
+    LIGHTNING = "Lightning"
+    ICE = "Ice"
+    POISON = "Poison"
 
 class Alignment(Enum):
     LAWFUL_GOOD = "Lawful Good"
@@ -31,14 +35,18 @@ class RelationshipLevel(Enum):
     LIKED = 1
     LOVED = 2
 
-ELEMENTS = [e.value for e in Element]
+# Updated advantages between elements (feel free to adjust)
 ADVANTAGES = {
-    Element.FIRE.value: [Element.AIR.value, Element.DARK.value],
-    Element.WATER.value: [Element.FIRE.value, Element.EARTH.value],
-    Element.AIR.value: [Element.WATER.value, Element.LIGHT.value],
-    Element.LIGHT.value: [Element.AIR.value, Element.DARK.value],
-    Element.EARTH.value: [Element.LIGHT.value, Element.FIRE.value],
-    Element.DARK.value: [Element.EARTH.value, Element.WATER.value]
+    Element.FIRE.value: [Element.ICE.value, Element.POISON.value, Element.NATURE.value],
+    Element.WATER.value: [Element.FIRE.value, Element.LIGHTNING.value],
+    Element.EARTH.value: [Element.LIGHTNING.value, Element.POISON.value],
+    Element.AIR.value: [Element.EARTH.value, Element.NATURE.value],
+    Element.LIGHT.value: [Element.DARK.value],
+    Element.DARK.value: [Element.LIGHT.value, Element.ICE.value],
+    Element.NATURE.value: [Element.WATER.value, Element.EARTH.value],
+    Element.LIGHTNING.value: [Element.AIR.value, Element.FIRE.value],
+    Element.ICE.value: [Element.LIGHTNING.value, Element.DARK.value],
+    Element.POISON.value: [Element.NATURE.value, Element.EARTH.value]
 }
 
 # Core Data Structures
@@ -112,8 +120,8 @@ class Player(Character):
             'Rogue': (90, 10, 8, 12)
         }
         super().__init__(name, *base_stats[char_class], element, alignment)
-        self.char_class = char_class  # Store class for later reference
-        self.party: List['NPC'] = []  # Starts empty; recruit via travel events.
+        self.char_class = char_class  # For later reference
+        self.party: List['NPC'] = []  # Starts empty; recruit later.
         self.completed_quests: int = 0
 
 class NPC(Character):
@@ -143,7 +151,7 @@ class WorldGenerator:
         ])
         return NPC(
             name=name,
-            element=Element(random.choice(ELEMENTS)),
+            element=Element(random.choice(list(Element))),
             alignment=Alignment(random.choice(list(Alignment)))
         )
 
@@ -196,6 +204,87 @@ class ItemGenerator:
             magic=random.randint(1, max(1, level//2))
         )
 
+# Extended Mob Properties and Creation Functions
+def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
+    """Return possible elements and alignments for a given mob type."""
+    mob_properties = {
+        "Slime": {
+            "elements": [Element.WATER, Element.POISON, Element.NATURE],
+            "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]
+        },
+        "Goblin": {
+            "elements": [Element.EARTH, Element.FIRE, Element.DARK],
+            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
+        },
+        "Shadow Beast": {
+            "elements": [Element.DARK],
+            "alignments": [Alignment.CHAOTIC_EVIL, Alignment.NEUTRAL_EVIL]
+        },
+        "Rat": {
+            "elements": [Element.EARTH, Element.POISON],
+            "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]
+        },
+        "Spider": {
+            "elements": [Element.POISON, Element.DARK],
+            "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_NEUTRAL]
+        },
+        "Skeleton": {
+            "elements": [Element.DARK],
+            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
+        },
+        "Dark Mage": {
+            "elements": [Element.DARK, Element.FIRE, Element.ICE],
+            "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_EVIL]
+        },
+        "Stone Golem": {
+            "elements": [Element.EARTH],
+            "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.TRUE_NEUTRAL]
+        },
+        "Harpy": {
+            "elements": [Element.AIR, Element.LIGHTNING],
+            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
+        },
+        "Werewolf": {
+            "elements": [Element.NATURE, Element.DARK],
+            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
+        },
+        "Dragon Wyrmling": {
+            "elements": [Element.FIRE, Element.ICE, Element.LIGHTNING],
+            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
+        },
+        "Lich": {
+            "elements": [Element.DARK, Element.ICE],
+            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
+        },
+        "Ancient Guardian": {
+            "elements": [Element.LIGHT, Element.EARTH],
+            "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.LAWFUL_EVIL]
+        }
+    }
+    default_properties = {
+        "elements": [Element.DARK],
+        "alignments": [Alignment.NEUTRAL_EVIL]
+    }
+    return mob_properties.get(mob_name, default_properties)
+
+def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defense: int, enemy_magic: int) -> NPC:
+    """Create an enemy NPC with appropriate element and alignment, plus some stat variation."""
+    properties = get_mob_properties(mob_name)
+    element = random.choice(properties["elements"])
+    alignment = random.choice(properties["alignments"])
+    enemy = NPC(name=mob_name, element=element, alignment=alignment)
+    enemy.health = enemy_health
+    enemy.max_health = enemy_health
+    enemy.attack = enemy_attack
+    enemy.defense = enemy_defense
+    enemy.magic_power = enemy_magic
+    # Apply a ±10% random variation to stats.
+    for stat in ['health', 'max_health', 'attack', 'defense', 'magic_power']:
+        variation = random.uniform(0.9, 1.1)
+        current_value = getattr(enemy, stat)
+        setattr(enemy, stat, int(current_value * variation))
+    return enemy
+
 # Game Systems
 class Quest:
     def __init__(self, description: str, difficulty: int, quest_type: str, rewards: dict):
@@ -208,12 +297,12 @@ class Quest:
 class CombatSystem:
     @staticmethod
     def calculate_damage(attacker: Character, defender: Character) -> int:
-        element_multiplier = 1.5 if defender.element.value in ADVANTAGES[attacker.element.value] else 1.0
+        element_multiplier = 1.5 if defender.element.value in ADVANTAGES.get(attacker.element.value, []) else 1.0
         base_damage = max(1, (attacker.attack - defender.defense))
         return int(base_damage * element_multiplier)
 
     @staticmethod
-    def party_vs_enemies(player_party: List[Character], enemies: List[Character]):
+    def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
         print("\n--- COMBAT BEGINS ---")
         while any(c.alive for c in player_party) and any(e.alive for e in enemies):
             for char in player_party:
@@ -222,19 +311,16 @@ class CombatSystem:
                     damage = CombatSystem.calculate_damage(char, target)
                     target.health = max(0, target.health - damage)
                     print(f"{char.name} hits {target.name} for {damage} damage!")
-            
             for enemy in enemies:
                 if enemy.alive:
                     target = random.choice([c for c in player_party if c.alive])
                     damage = CombatSystem.calculate_damage(enemy, target)
                     target.health = max(0, target.health - damage)
                     print(f"{enemy.name} attacks {target.name} for {damage} damage!")
-            
             for char in player_party + enemies:
                 if char.health <= 0 and char.alive:
                     print(f"{char.name} has died!")
                     char.alive = False
-
         return any(c.alive for c in player_party)
 
 class RelationshipSystem:
@@ -242,15 +328,11 @@ class RelationshipSystem:
     def handle_shared_quest(player: Player, npc: NPC, quest: Quest):
         relationship_change = random.randint(10, 25)
         if quest.success:
-            npc.update_relationship(player, relationship_change, 
-                                   f"Successfully completed {quest.description}")
-            player.update_relationship(npc, relationship_change//2, 
-                                      "Worked well together")
+            npc.update_relationship(player, relationship_change, f"Successfully completed {quest.description}")
+            player.update_relationship(npc, relationship_change // 2, "Worked well together")
         else:
-            npc.update_relationship(player, -relationship_change, 
-                                   f"Failed {quest.description}")
-            player.update_relationship(npc, -relationship_change//2, 
-                                      "Let them down")
+            npc.update_relationship(player, -relationship_change, f"Failed {quest.description}")
+            player.update_relationship(npc, -relationship_change // 2, "Let them down")
 
     @staticmethod
     def check_party_morale(party: List[NPC]) -> float:
@@ -271,7 +353,7 @@ class Game:
             print("Invalid class! Defaulting to Warrior.")
             char_class = 'Warrior'
         
-        print("\nChoose element: Fire, Water, Air, Light, Earth, Dark")
+        print("\nChoose element: " + ", ".join([e.value for e in Element]))
         element_input = input("Enter element: ").strip().capitalize()
         try:
             element = Element(element_input)
@@ -280,9 +362,8 @@ class Game:
             element = Element.FIRE
         
         print("\nChoose alignment:")
-        print("Options: Lawful Good, Neutral Good, Chaotic Good, Lawful Neutral, True Neutral, Chaotic Neutral, Lawful Evil, Neutral Evil, Chaotic Evil")
+        print(", ".join([a.value for a in Alignment]))
         alignment_input = input("Enter alignment: ").strip().replace(' ', '_').upper()
-        
         try:
             alignment = Alignment[alignment_input]
         except KeyError:
@@ -293,20 +374,17 @@ class Game:
         print(f"\nWelcome {self.player.name}, {self.player.alignment.value} {char_class} of {element.value}!")
     
     def estimate_success_probability(self, quest: Quest) -> int:
-        # Simple estimation formula:
-        # Base chance 50%, modified by (player level - quest difficulty)*5 and (player.attack - 11)*2.
         base = 50
         level_factor = (self.player.level - quest.difficulty) * 5
-        attack_factor = (self.player.attack - 11) * 2  # assuming average enemy attack around 11
+        attack_factor = (self.player.attack - 11) * 2
         chance = base + level_factor + attack_factor
         return max(5, min(95, chance))
     
     def handle_recruitment(self):
-        # Recruitment from travel: 40% chance to meet a recruitable NPC.
         if random.random() < 0.4:
             npc = WorldGenerator.generate_npc()
             print(f"\nYou encountered {npc.name} during your journey.")
-            if input("Would you like to recruit them? (y/n): ").lower() == 'y':
+            if input("Recruit them? (y/n): ").lower() == 'y':
                 self.player.party.append(npc)
                 print(f"{npc.name} has joined your party!")
             else:
@@ -364,11 +442,7 @@ class Game:
         enemies = [WorldGenerator.generate_npc() for _ in range(3)]
         print("\nYour party encounters enemies!")
         party = [self.player] + self.player.party
-        victory = CombatSystem.party_vs_enemies(
-            [c for c in party if c.alive],
-            enemies
-        )
-        
+        victory = CombatSystem.party_vs_enemies([c for c in party if c.alive], enemies)
         if victory:
             print("\nQuest successful!")
             self.player.completed_quests += 1
@@ -387,8 +461,6 @@ class Game:
             if not npc.alive:
                 print(f"{npc.name} perished during the quest...")
                 self.player.party.remove(npc)
-        
-        # After a quest, offer a chance to recruit an NPC (via travel) if none is recruited already.
         if not self.player.party:
             self.handle_recruitment()
     
@@ -399,15 +471,13 @@ class Game:
         print("\n=== PARTY MANAGEMENT ===")
         for i, npc in enumerate(self.player.party, 1):
             print(f"{i}. {npc.name} (HP: {npc.health}/{npc.max_health})")
-        
         choice = input("Manage party member (number) or (b)ack: ")
         if choice.isdigit() and 0 < int(choice) <= len(self.player.party):
-            npc = self.player.party[int(choice)-1]
+            npc = self.player.party[int(choice) - 1]
             print(f"\n{npc.name}'s Status:")
             print(f"Element: {npc.element.value}")
             print(f"Alignment: {npc.alignment.value}")
             print(f"Relationship: {npc.relationships.get(self.player.name, Relationship()).level.name}")
-            
             action = input("(e)quip, (d)ismiss, (b)ack: ").lower()
             if action == 'd':
                 self.world_npcs.append(npc)
@@ -416,11 +486,11 @@ class Game:
     
     def relationship_browser(self):
         print("\n=== RELATIONSHIPS ===")
-        combined_npcs = self.world_npcs + self.player.party
-        if not combined_npcs:
+        combined = self.world_npcs + self.player.party
+        if not combined:
             print("No NPCs to display.")
             return
-        for npc in combined_npcs:
+        for npc in combined:
             rel = self.player.relationships.get(npc.name, Relationship())
             print(f"{npc.name}: {rel.level.name} ({rel.progress}%)")
             if input("Show history? (y/n): ").lower() == 'y':
@@ -434,7 +504,6 @@ class Game:
             return
         for i, item in enumerate(self.player.inventory, 1):
             print(f"{i}. {item}")
-        
         choice = input("(u)se, (d)rop, (b)ack: ")
         if choice == 'd':
             index = input("Enter item number to drop: ")
@@ -453,7 +522,6 @@ class Game:
         print("4. Explore a Dungeon")
         print("5. Meet Travelers")
         choice = input("Your choice: ")
-        
         if choice == '1':
             self.travel_help_someone()
         elif choice == '2':
@@ -469,7 +537,6 @@ class Game:
     
     def travel_help_someone(self):
         print("\nYou come across a villager in distress!")
-        # Simulate a small non-combat scenario.
         success = random.random() < 0.8
         if success:
             print("You help resolve the problem, earning gratitude and a small reward.")
@@ -480,7 +547,6 @@ class Game:
     
     def travel_solve_mystery(self):
         print("\nYou investigate strange happenings in a nearby forest.")
-        # Mystery outcome based on a chance influenced by player's level.
         chance = 0.5 + (self.player.level / 100)
         if random.random() < chance:
             print("Your keen senses uncover vital clues!")
@@ -490,7 +556,7 @@ class Game:
     
     def travel_farm_exp(self):
         print("\nYou head to a training area to farm experience.")
-        # Define farming locations with specific mobs and multipliers.
+        # Define locations with detailed mob info.
         farming_locations = {
             "Glistening Grove": {
                 "mob_name": "Slime",
@@ -558,107 +624,112 @@ class Game:
                 "base_exp": 90
             }
         }
-        location_name = random.choice(list(farming_locations.keys()))
+        # Let the player choose a location.
+        print("\nAvailable Locations:")
+        for i, (loc, data) in enumerate(farming_locations.items(), 1):
+            print(f"{i}. {loc} - Mob: {data['mob_name']} | Multiplier: {data['difficulty_multiplier']} | Base EXP: {data['base_exp']}")
+        choice = input("Enter the number of the location you want to visit: ")
+        try:
+            choice = int(choice)
+            if 1 <= choice <= len(farming_locations):
+                location_name = list(farming_locations.keys())[choice - 1]
+            else:
+                print("Invalid selection. Defaulting to a random location.")
+                location_name = random.choice(list(farming_locations.keys()))
+        except ValueError:
+            print("Invalid input. Defaulting to a random location.")
+            location_name = random.choice(list(farming_locations.keys()))
         location_data = farming_locations[location_name]
         print(f"\nYou arrive at {location_name}.")
-        
-       # Calculate enemy level based on player's level and location difficulty.
-        enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
         mob_name = location_data['mob_name']
-
-        # Create enemy stats based on mob type.
-        if mob_name == "Slime":  # Weak starter enemy
+        enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
+        
+        # Determine enemy stats based on mob type.
+        if mob_name == "Slime":
             enemy_health = 30 * enemy_level
             enemy_attack = 3 * enemy_level
             enemy_defense = 1 * enemy_level
             enemy_magic = 1 * enemy_level
-        elif mob_name == "Goblin":  # Basic melee enemy
+        elif mob_name == "Goblin":
             enemy_health = 50 * enemy_level
             enemy_attack = 5 * enemy_level
             enemy_defense = 3 * enemy_level
             enemy_magic = 2 * enemy_level
-        elif mob_name == "Shadow Beast":  # Advanced enemy
+        elif mob_name == "Shadow Beast":
             enemy_health = 70 * enemy_level
             enemy_attack = 7 * enemy_level
             enemy_defense = 4 * enemy_level
             enemy_magic = 3 * enemy_level
-        elif mob_name == "Rat":  # Weak enemy, fast attacks
+        elif mob_name == "Rat":
             enemy_health = 25 * enemy_level
             enemy_attack = 4 * enemy_level
             enemy_defense = 1 * enemy_level
             enemy_magic = 0 * enemy_level
-        elif mob_name == "Spider":  # Weak enemy with poison potential
+        elif mob_name == "Spider":
             enemy_health = 35 * enemy_level
             enemy_attack = 3 * enemy_level
             enemy_defense = 2 * enemy_level
             enemy_magic = 3 * enemy_level
-        elif mob_name == "Skeleton":  # Undead warrior
+        elif mob_name == "Skeleton":
             enemy_health = 45 * enemy_level
             enemy_attack = 6 * enemy_level
             enemy_defense = 3 * enemy_level
             enemy_magic = 1 * enemy_level
-        elif mob_name == "Dark Mage":  # Magic focused enemy
+        elif mob_name == "Dark Mage":
             enemy_health = 40 * enemy_level
             enemy_attack = 2 * enemy_level
             enemy_defense = 2 * enemy_level
             enemy_magic = 8 * enemy_level
-        elif mob_name == "Stone Golem":  # High defense enemy
+        elif mob_name == "Stone Golem":
             enemy_health = 100 * enemy_level
             enemy_attack = 4 * enemy_level
             enemy_defense = 8 * enemy_level
             enemy_magic = 0 * enemy_level
-        elif mob_name == "Harpy":  # Fast flying enemy
+        elif mob_name == "Harpy":
             enemy_health = 45 * enemy_level
             enemy_attack = 6 * enemy_level
             enemy_defense = 2 * enemy_level
             enemy_magic = 3 * enemy_level
-        elif mob_name == "Werewolf":  # Strong physical attacker
+        elif mob_name == "Werewolf":
             enemy_health = 65 * enemy_level
             enemy_attack = 8 * enemy_level
             enemy_defense = 4 * enemy_level
             enemy_magic = 1 * enemy_level
-        elif mob_name == "Dragon Wyrmling":  # Mini boss type
+        elif mob_name == "Dragon Wyrmling":
             enemy_health = 85 * enemy_level
             enemy_attack = 7 * enemy_level
             enemy_defense = 6 * enemy_level
             enemy_magic = 6 * enemy_level
-        elif mob_name == "Lich":  # Powerful magic boss
+        elif mob_name == "Lich":
             enemy_health = 75 * enemy_level
             enemy_attack = 4 * enemy_level
             enemy_defense = 5 * enemy_level
             enemy_magic = 10 * enemy_level
-        elif mob_name == "Ancient Guardian":  # Defensive boss
+        elif mob_name == "Ancient Guardian":
             enemy_health = 120 * enemy_level
             enemy_attack = 6 * enemy_level
             enemy_defense = 9 * enemy_level
             enemy_magic = 4 * enemy_level
-        else:  # Default enemy stats
+        else:
             enemy_health = 40 * enemy_level
             enemy_attack = 4 * enemy_level
             enemy_defense = 2 * enemy_level
-        enemy_magic = 2 * enemy_level
+            enemy_magic = 2 * enemy_level
         
-        # Create a custom enemy. Here, we use a dummy NPC with fixed element and alignment.
-        enemy = NPC(name=mob_name, element=Element.DARK, alignment=Alignment.CHAOTIC_EVIL)
-        enemy.health = enemy_health
-        enemy.max_health = enemy_health
-        enemy.attack = enemy_attack
-        enemy.defense = enemy_defense
-        enemy.magic_power = enemy_magic
-        
-        print(f"A wild {mob_name} (Level {enemy_level}) appears! (HP: {enemy.health}, ATK: {enemy.attack}, DEF: {enemy.defense})")
-        
-        # Simulate combat with the enemy.
+        # Create the enemy using the extended function (which assigns element, alignment, and variation).
+        enemy = create_enemy(mob_name, enemy_health, enemy_attack, enemy_defense, enemy_magic)
+        print(f"A wild {mob_name} (Level {enemy_level}) appears!")
+        print(f"Stats -> HP: {enemy.health}, ATK: {enemy.attack}, DEF: {enemy.defense}, MAG: {enemy.magic_power}")
+        # (Optionally, here you could list status effects like Burn, Freeze, Drain based on the enemy.element)
         victory = CombatSystem.party_vs_enemies([self.player] + self.player.party, [enemy])
         if victory:
             print("You defeat the enemy!")
-            # Scale exp reward: if enemy is much weaker than the player, reward is lower.
             exp_reward = int(location_data['base_exp'] * (enemy_level / self.player.level))
             exp_reward = max(10, exp_reward)
             self.player.exp += exp_reward
             print(f"You gain {exp_reward} experience!")
         else:
-            print("You were overwhelmed by the enemy and had to retreat.")
+            print("You were overwhelmed and had to retreat.")
     
     def travel_explore_dungeon(self):
         print("\nYou explore a mysterious dungeon filled with dangers and treasures.")
