@@ -213,16 +213,30 @@ class Player(Character):
             self.exp -= required_exp
             self.level += 1
             leveled_up = True
-            self.base_health += 10
-            self.base_attack += 2
-            self.base_defense += 2
-            self.base_magic += 2
-            self.max_health = self.base_health
-            self.health = self.max_health
-            print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
-            required_exp = 100 + (self.level - 1) * 20
-        if leveled_up:
-            print(f"EXP remaining: {self.exp}/{required_exp}")
+
+            # Class-specific stat increases
+            if self.char_class == 'Warrior':
+                self.base_health += 15
+                self.base_attack += 3
+                self.base_defense += 2
+                self.base_magic += 1
+            elif self.char_class == 'Mage':
+                self.base_health += 8
+                self.base_attack += 1
+                self.base_defense += 1
+                self.base_magic += 4
+            elif self.char_class == 'Rogue':
+                self.base_health += 10
+                self.base_attack += 2
+                self.base_defense += 2
+                self.base_magic += 2
+
+        self.max_health = self.base_health
+        self.health = self.max_health
+        print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
+        required_exp = 100 + (self.level - 1) * 20
+    if leveled_up:
+        print(f"EXP remaining: {self.exp}/{required_exp}")
 
     def use_consumable(self, consumable: Consumable):
         if consumable.heal_value > 0:
