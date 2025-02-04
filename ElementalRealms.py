@@ -65,6 +65,7 @@ class Item:
     value: int = 0
 
     def __post_init__(self):
+        # Price is auto–generated if not explicitly set.
         self.value = (self.attack + self.defense + self.magic) * 10 + random.randint(10, 50)
 
     def __str__(self):
@@ -77,7 +78,7 @@ class Item:
             stats.append(f"MAG +{self.magic}")
         return f"{self.name} ({', '.join(stats)})"
 
-# New: Consumable Items (e.g., Health Potions, Throwable items, etc.)
+# Consumable items (e.g., Health Potions, Throwables)
 class Consumable(Item):
     def __init__(self, name: str, heal_value: int = 0, throw_damage: int = 0):
         super().__init__(name)
@@ -91,6 +92,19 @@ class Consumable(Item):
             return f"{self.name} (Throw Damage {self.throw_damage})"
         else:
             return self.name
+
+# Equipment detection helper – determines which slot an item belongs to.
+def determine_slot(item: Item) -> Optional[str]:
+    name = item.name.lower()
+    if "sword" in name or "wand" in name or "tome" in name:
+        return "weapon"
+    elif "armor" in name:
+        return "armor"
+    elif "shield" in name:
+        return "shield"
+    elif "ring" in name or "amulet" in name:
+        return "accessory"
+    return None
 
 # Base Character classes
 class Character:
@@ -135,25 +149,56 @@ class Player(Character):
             'Mage': (80, 5, 5, 20),
             'Rogue': (90, 10, 8, 12)
         }
+        # Initialize using the chosen class's stats
         super().__init__(name, *base_stats[char_class], element, alignment)
         self.char_class = char_class
         self.party: List['NPC'] = []
         self.completed_quests: int = 0
+        # Store base stats for equipment calculations.
+        self.base_health = self.max_health
+        self.base_attack = self.attack
+        self.base_defense = self.defense
+        self.base_magic = self.magic_power
+        # Equipment slots: weapon, armor, shield, accessory.
+        self.equipment: Dict[str, Optional[Item]] = {"weapon": None, "armor": None, "shield": None, "accessory": None}
+
+    def recalc_stats(self):
+        bonus_attack = 0
+        bonus_defense = 0
+        bonus_magic = 0
+        for slot, item in self.equipment.items():
+            if item:
+                bonus_attack += item.attack
+                bonus_defense += item.defense
+                bonus_magic += item.magic
+        self.attack = self.base_attack + bonus_attack
+        self.defense = self.base_defense + bonus_defense
+        self.magic_power = self.base_magic + bonus_magic
+
+    def equip_item(self, item: Item, slot: str):
+        if self.equipment.get(slot):
+            old_item = self.equipment[slot]
+            self.inventory.append(old_item)
+            print(f"Unequipped {old_item.name} from {slot} slot.")
+        self.equipment[slot] = item
+        self.recalc_stats()
+        print(f"Equipped {item.name} in {slot} slot.")
 
     def check_level_up(self):
-        # Required EXP = 100 + (level - 1) * 20
         required_exp = 100 + (self.level - 1) * 20
         leveled_up = False
         while self.exp >= required_exp:
             self.exp -= required_exp
             self.level += 1
             leveled_up = True
-            # Increase key stats on level up
-            self.max_health += 10
+            # Increase base stats on level up.
+            self.base_health += 10
+            self.base_attack += 2
+            self.base_defense += 2
+            self.base_magic += 2
+            # Restore health to new max.
+            self.max_health = self.base_health
             self.health = self.max_health
-            self.attack += 2
-            self.defense += 2
-            self.magic_power += 2
             print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
             required_exp = 100 + (self.level - 1) * 20
         if leveled_up:
@@ -164,10 +209,8 @@ class Player(Character):
             healed = min(consumable.heal_value, self.max_health - self.health)
             self.health += healed
             print(f"{self.name} uses {consumable.name} and restores {healed} HP!")
-        # Additional consumable effects (e.g., throw damage) can be added here.
 
     def auto_use_consumables(self):
-        # Auto–use a health potion if health falls below 30% of maximum
         if self.health < 0.3 * self.max_health:
             for item in self.inventory:
                 if isinstance(item, Consumable) and item.heal_value > 0:
@@ -325,7 +368,6 @@ def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defe
     enemy.attack = enemy_attack
     enemy.defense = enemy_defense
     enemy.magic_power = enemy_magic
-    # Apply a ±10% variation to stats.
     for stat in ['health', 'max_health', 'attack', 'defense', 'magic_power']:
         variation = random.uniform(0.9, 1.1)
         current_value = getattr(enemy, stat)
@@ -335,7 +377,6 @@ def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defe
 # Shop System
 class Shop:
     def __init__(self):
-        # Define a shop inventory: each entry is a dict with an "item" and its "price"
         self.inventory = [
             {"item": Item("Iron Sword", attack=5), "price": 100},
             {"item": Item("Steel Armor", defense=5), "price": 150},
@@ -395,7 +436,6 @@ class CombatSystem:
     def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
         print("\n--- COMBAT BEGINS ---")
         while any(c.alive for c in player_party) and any(e.alive for e in enemies):
-            # Player party turn
             for char in player_party:
                 if not char.alive:
                     continue
@@ -408,7 +448,6 @@ class CombatSystem:
                 damage = CombatSystem.calculate_damage(char, target)
                 target.health = max(0, target.health - damage)
                 print(f"{char.name} hits {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
-            # Enemies turn
             for enemy in enemies:
                 if not enemy.alive:
                     continue
@@ -419,7 +458,6 @@ class CombatSystem:
                 damage = CombatSystem.calculate_damage(enemy, target)
                 target.health = max(0, target.health - damage)
                 print(f"{enemy.name} attacks {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
-            # Check for deaths
             for char in player_party + enemies:
                 if char.health <= 0 and char.alive:
                     print(f"{char.name} has died!")
@@ -473,7 +511,6 @@ class Game:
             alignment = Alignment.TRUE_NEUTRAL
         self.player = Player(name, char_class, element, alignment)
         print(f"\nWelcome {self.player.name}, {self.player.alignment.value} {char_class} of {element.value}!")
-        # Starting gold and a basic consumable for demonstration
         self.player.gold = 200
         self.player.inventory.append(Consumable("Health Potion", heal_value=50))
 
@@ -609,7 +646,8 @@ class Game:
             return
         for i, item in enumerate(self.player.inventory, 1):
             print(f"{i}. {item}")
-        choice = input("(u)se, (d)rop, (b)ack: ").lower()
+        print("(u)se, (d)rop, (e)quip, (b)ack")
+        choice = input("Your choice: ").lower()
         if choice == 'u':
             index = input("Enter item number to use: ")
             if index.isdigit():
@@ -628,6 +666,22 @@ class Game:
                 if 0 <= index < len(self.player.inventory):
                     dropped_item = self.player.inventory.pop(index)
                     print(f"Dropped {dropped_item.name}")
+        elif choice == 'e':
+            index = input("Enter item number to equip: ")
+            if index.isdigit():
+                index = int(index) - 1
+                if 0 <= index < len(self.player.inventory):
+                    item = self.player.inventory[index]
+                    slot = determine_slot(item)
+                    if slot:
+                        self.player.equip_item(item, slot)
+                        self.player.inventory.pop(index)
+                    else:
+                        print("This item cannot be equipped.")
+        elif choice == 'b':
+            return
+        else:
+            print("Invalid option.")
 
     def travel_system(self):
         print("\nYou set out to travel to a new area...")
@@ -877,6 +931,13 @@ class Game:
         print(f"Magic: {self.player.magic_power}")
         print(f"Party Members: {len(self.player.party)}")
         print(f"Inventory Items: {len(self.player.inventory)}")
+        if self.player.equipment:
+            print("Equipped Items:")
+            for slot, item in self.player.equipment.items():
+                if item:
+                    print(f"  {slot.capitalize()}: {item.name}")
+                else:
+                    print(f"  {slot.capitalize()}: None")
 
 if __name__ == "__main__":
     game = Game()
