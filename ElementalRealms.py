@@ -5,7 +5,6 @@ import time
 from enum import Enum
 
 # --- Extended Enums and Constants ---
-
 class Element(Enum):
     FIRE = "Fire"
     WATER = "Water"
@@ -36,6 +35,17 @@ class RelationshipLevel(Enum):
     LIKED = 1
     LOVED = 2
 
+class QuestRank(Enum):
+    F = 1
+    E = 2
+    D = 3
+    C = 4
+    B = 5
+    A = 6
+    S = 7
+    SS = 8
+    SSS = 9
+
 # Basic elemental advantages – adjust as needed.
 ADVANTAGES = {
     Element.FIRE.value: [Element.ICE.value, Element.POISON.value, Element.NATURE.value],
@@ -51,14 +61,12 @@ ADVANTAGES = {
 }
 
 # --- Core Data Structures ---
-
 @dataclass
 class Relationship:
     level: RelationshipLevel = RelationshipLevel.NEUTRAL
     progress: int = 0
     history: List[str] = field(default_factory=list)
 
-# We now add two new optional fields to items: effect and effect_chance.
 @dataclass
 class Item:
     name: str
@@ -66,11 +74,10 @@ class Item:
     defense: int = 0
     magic: int = 0
     value: int = 0
-    effect: Optional[str] = None         # For example: "Bleed", "Stun"
-    effect_chance: float = 0.0           # Extra chance (in decimal) to trigger the effect
+    effect: Optional[str] = None  # For example: "Bleed", "Stun"
+    effect_chance: float = 0.0  # Extra chance (in decimal) to trigger the effect
 
     def __post_init__(self):
-        # Auto–generate a price if not explicitly set.
         self.value = (self.attack + self.defense + self.magic) * 10 + random.randint(10, 50)
 
     def __str__(self):
@@ -86,7 +93,6 @@ class Item:
             extra = f", Effect: {self.effect} ({int(self.effect_chance*100)}% chance)"
         return f"{self.name} ({', '.join(stats)}{extra})"
 
-# Consumable items (e.g., Health Potions)
 class Consumable(Item):
     def __init__(self, name: str, heal_value: int = 0, throw_damage: int = 0):
         super().__init__(name)
@@ -120,7 +126,6 @@ def determine_slot(item: Item) -> Optional[str]:
 # Some effects modify multipliers (e.g., Empowered, Cursed) or prevent actions (Frozen, Stun).
 
 # --- Base Character Classes ---
-
 class Character:
     def __init__(self, name: str, health: int, attack: int, defense: int, magic: int, element: Element, alignment: Alignment):
         self.name = name
@@ -173,6 +178,18 @@ class Character:
                 del self.status_effects[effect_name]
 
 class Player(Character):
+    RANK_THRESHOLDS = {
+        QuestRank.F: 100,
+        QuestRank.E: 250,
+        QuestRank.D: 500,
+        QuestRank.C: 1000,
+        QuestRank.B: 2000,
+        QuestRank.A: 4000,
+        QuestRank.S: 8000,
+        QuestRank.SS: 16000,
+        QuestRank.SSS: 32000
+    }
+
     def __init__(self, name: str, char_class: str, element: Element, alignment: Alignment):
         base_stats = {
             'Warrior': (120, 15, 10, 5),
@@ -188,14 +205,57 @@ class Player(Character):
         self.base_defense = self.defense
         self.base_magic = self.magic_power
         self.equipment: Dict[str, Optional[Item]] = {"weapon": None, "armor": None, "shield": None, "accessory": None}
+        self.current_rank: QuestRank = QuestRank.F
+        self.rank_progress: int = 0
+        self.rank_threshold: int = self.RANK_THRESHOLDS[QuestRank.F]
 
     def recalc_stats(self):
-        bonus_attack = sum(item.attack for item in self.equipment.values() if item)
-        bonus_defense = sum(item.defense for item in self.equipment.values() if item)
-        bonus_magic = sum(item.magic for item in self.equipment.values() if item)
-        self.attack = self.base_attack + bonus_attack
-        self.defense = self.base_defense + bonus_defense
-        self.magic_power = self.base_magic + bonus_magic
+        self.attack = self.base_attack + sum(item.attack for item in self.equipment.values() if item)
+        self.defense = self.base_defense + sum(item.defense for item in self.equipment.values() if item)
+        self.magic_power = self.base_magic + sum(item.magic for item in self.equipment.values() if item)
+
+    def check_level_up(self):
+        required_exp = 100 + (self.level - 1) * 20
+        leveled_up = False
+        while self.exp >= required_exp:
+            self.exp -= required_exp
+            self.level += 1
+            leveled_up = True
+            if self.char_class == 'Warrior':
+                self.base_health += 15
+                self.base_attack += 3
+                self.base_defense += 2
+                self.base_magic += 1
+            elif self.char_class == 'Mage':
+                self.base_health += 8
+                self.base_attack += 1
+                self.base_defense += 1
+                self.base_magic += 4
+            elif self.char_class == 'Rogue':
+                self.base_health += 10
+                self.base_attack += 2
+                self.base_defense += 2
+                self.base_magic += 2
+            self.max_health = self.base_health
+            self.health = self.max_health
+            print(f"\n*** Level up! Now Level {self.level}! ***")
+            required_exp = 100 + (self.level - 1) * 20
+        if leveled_up:
+            print(f"EXP to next level: {self.exp}/{required_exp}")
+
+    def update_rank_progress(self, difficulty: int):
+        base_progress = difficulty * 10
+        rank_modifier = (self.current_rank.value * 0.2) + 1
+        self.rank_progress += int(base_progress * rank_modifier)
+        print(f"\nRank Progress: {self.rank_progress}/{self.rank_threshold}")
+        if self.rank_progress >= self.rank_threshold:
+            if self.current_rank != QuestRank.SSS:
+                self.current_rank = QuestRank(self.current_rank.value + 1)
+                self.rank_threshold = self.RANK_THRESHOLDS[self.current_rank]
+                self.rank_progress = 0
+                print(f"\n*** Achieved {self.current_rank.name} Rank! ***")
+            else:
+                print("\n*** Maximum Rank (SSS) Achieved! ***")
 
     def equip_item(self, item: Item, slot: str):
         if self.equipment.get(slot):
@@ -213,8 +273,6 @@ class Player(Character):
             self.exp -= required_exp
             self.level += 1
             leveled_up = True
-
-            # Class-specific stat increases
             if self.char_class == 'Warrior':
                 self.base_health += 15
                 self.base_attack += 3
@@ -230,13 +288,12 @@ class Player(Character):
                 self.base_attack += 2
                 self.base_defense += 2
                 self.base_magic += 2
-
-        self.max_health = self.base_health
-        self.health = self.max_health
-        print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
-        required_exp = 100 + (self.level - 1) * 20
-    if leveled_up:
-        print(f"EXP remaining: {self.exp}/{required_exp}")
+            self.max_health = self.base_health
+            self.health = self.max_health
+            print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
+            required_exp = 100 + (self.level - 1) * 20
+        if leveled_up:
+            print(f"EXP remaining: {self.exp}/{required_exp}")
 
     def use_consumable(self, consumable: Consumable):
         if consumable.heal_value > 0:
@@ -271,8 +328,73 @@ class NPC(Character):
         }
 
 # --- Procedural Generation Systems ---
-
 class WorldGenerator:
+    TIER_QUESTS = {
+        QuestRank.F: [
+            ("Slime Extermination", "Defeat {n} Slimes in the forest", "slimes", 3, 5),
+            ("Rat Patrol", "Clear {n} Giant Rats from the sewers", "rats", 2, 4),
+            ("Herb Collection", "Gather {n} medicinal herbs for the apothecary", "herbs", 5, 8),
+            ("Lost Package", "Recover {n} lost packages from the wilderness", "packages", 3, 5),
+            ("Scout Duty", "Patrol the village outskirts for {n} hours", "hours", 4, 6)
+        ],
+        QuestRank.E: [
+            ("Goblin Camp", "Clear {n} Goblin camps near the village", "camps", 2, 3),
+            ("Spider Silk", "Collect {n} bundles of spider silk", "silk", 4, 6),
+            ("Bandit Hunt", "Defeat {n} bandits harassing travelers", "bandits", 3, 5),
+            ("Ancient Relics", "Recover {n} ancient relics from ruins", "relics", 2, 4),
+            ("Wolves' Bane", "Protect livestock from {n} wolves", "wolves", 4, 6)
+        ],
+        QuestRank.D: [
+            ("Orc Raid", "Defeat {n} Orc raiders in the mountains", "orcs", 3, 5),
+            ("Mystic Crystal", "Find {n} Mystic Crystals in the Crystal Caverns", "crystals", 2, 4),
+            ("Treasure Hunt", "Retrieve {n} treasure chests from the pirate ship", "treasures", 3, 5),
+            ("Forest Fire", "Extinguish {n} forest fires", "fires", 4, 6),
+            ("Desert Bandits", "Defeat {n} Desert Bandits", "bandits", 3, 5)
+        ],
+        QuestRank.C: [
+            ("Troll Bridge", "Build a bridge over the river using {n} trolls", "trolls", 2, 3),
+            ("Haunted Mansion", "Clear {n} ghosts from the haunted mansion", "ghosts", 4, 6),
+            ("Mine Collapse", "Rescue miners trapped in the collapsing mine", "miners", 3, 5),
+            ("Dragon Cave", "Defeat {n} baby dragons in the dragon cave", "dragons", 2, 4),
+            ("Frozen Lake", "Break the ice on the frozen lake", "ice", 4, 6)
+        ],
+        QuestRank.B: [
+            ("Golem Army", "Defeat {n} stone golems", "golems", 3, 5),
+            ("Phoenix Nest", "Destroy {n} phoenix nests", "nests", 2, 4),
+            ("Volcano Eruption", "Contain the volcano eruption", "volcano", 3, 5),
+            ("Haunted Forest", "Clear the haunted forest", "forest", 4, 6),
+            ("Ice Troll", "Defeat {n} ice trolls", "trolls", 3, 5)
+        ],
+        QuestRank.A: [
+            ("Lich Tower", "Defeat the lich in the tower", "lich", 1, 1),
+            ("Demon Gate", "Seal the demon gate", "gate", 1, 1),
+            ("Mystical Dragon", "Capture the mystical dragon", "dragon", 1, 1),
+            ("Dark Wizard", "Defeat the dark wizard", "wizard", 1, 1),
+            ("Undead Army", "Defeat the undead army", "army", 1, 1)
+        ],
+        QuestRank.S: [
+            ("Dragon Queen", "Defeat the dragon queen", "queen", 1, 1),
+            ("Devil's Lair", "Destroy the devil's lair", "lair", 1, 1),
+            ("Celestial Being", "Summon a celestial being", "being", 1, 1),
+            ("Eldritch Horror", "Banish the eldritch horror", "horror", 1, 1),
+            ("Time Guardian", "Defeat the time guardian", "guardian", 1, 1)
+        ],
+        QuestRank.SS: [
+            ("Ancient God", "Defeat the ancient god", "god", 1, 1),
+            ("Primordial Chaos", "Seal primordial chaos", "chaos", 1, 1),
+            ("Cosmic Anomaly", "Contain the cosmic anomaly", "anomaly", 1, 1),
+            ("Dimensional Rift", "Close the dimensional rift", "rift", 1, 1),
+            ("Planar Invader", "Defeat the planar invader", "invader", 1, 1)
+        ],
+        QuestRank.SSS: [
+            ("DemiGod Slayer", "Defeat {n} Demi-Humans from the Astral Plane", "demihumans", 1, 1),
+            ("Worldbreaker", "Stop {n} Reality Collapse Events", "collapses", 1, 2),
+            ("Titan's Fall", "Slay {n} Primordial Titans", "titans", 1, 1),
+            ("Void Walker", "Close {n} Corrupted Dimension Rifts", "rifts", 1, 3),
+            ("Eternal Champion", "Win {n} Trials of the Infinite Arena", "trials", 3, 5)
+        ]
+    }
+
     @staticmethod
     def generate_npc() -> NPC:
         name = random.choice([
@@ -286,53 +408,150 @@ class WorldGenerator:
         )
 
     @staticmethod
-    def generate_quest(player_level: int) -> 'Quest':
-        quest_types = ['combat', 'gather', 'rescue', 'diplomacy']
-        quest_type = random.choices(quest_types, weights=[40, 30, 20, 10])[0]
-        templates = {
-            'combat': [
-                f"Defeat the {random.choice(['Corrupted', 'Fallen'])} {random.choice(['Knight', 'Mage', 'Titan'])}",
-                f"Clear {random.randint(3,6)} {random.choice(['bandit', 'goblin', 'undead'])} camps"
-            ],
-            'gather': [
-                f"Recover {random.randint(5,8)} {random.choice(['artifacts', 'relics', 'crystals'])}",
-                f"Collect {random.randint(10,15)} {random.choice(['herbs', 'ores', 'components'])}"
-            ],
-            'rescue': [
-                f"Save the {random.choice(['merchant', 'blacksmith', 'elder'])} from {random.choice(['bandits', 'monsters', 'cultists'])}",
-                f"Escort the {random.choice(['diplomat', 'scholar', 'priest'])} through dangerous territory"
-            ],
-            'diplomacy': [
-                f"Negotiate peace between {random.choice(['nobles', 'guilds', 'villages'])}",
-                f"Convince the {random.choice(['mages', 'druids', 'mercenaries'])} to join the cause"
-            ]
-        }
+    def generate_quest(player_rank: QuestRank) -> 'Quest':
+        templates = WorldGenerator.TIER_QUESTS[player_rank]
+        name, desc_template, target, min_count, max_count = random.choice(templates)
+        count = random.randint(min_count, max_count)
+        difficulty = player_rank.value * 10 + random.randint(-2, 2)
         return Quest(
-            description=random.choice(templates[quest_type]),
-            difficulty=min(max(player_level + random.randint(-2, 2), 1), 20),
-            quest_type=quest_type,
+            name=name,
+            description=desc_template.replace("{n}", str(count)),
+            difficulty=difficulty,
+            target=target,
+            target_count=count,
             rewards={
-                'exp': player_level * 50,
-                'gold': player_level * 25,
-                'items': [ItemGenerator.generate_item(player_level)] if random.random() > 0.7 else []
+                'exp': 50 * player_rank.value,
+                'gold': 25 * player_rank.value,
+                'items': [ItemGenerator.generate_item(player_rank.value)] if random.random() > 0.7 else []
             }
         )
 
 class ItemGenerator:
     @staticmethod
-    def generate_item(level: int) -> Item:
-        prefixes = ["Ancient", "Forgotten", "Divine", "Cursed", "Enchanted"]
+    def generate_item(tier: int) -> Item:
+        prefixes = ["Rusty", "Basic", "Sharp", "Sturdy", "Enchanted", "Epic", "Legendary", "Mythic"]
         suffixes = ["Power", "Wisdom", "the Ages", "Destiny", "Elements"]
         item_types = ["Sword", "Amulet", "Ring", "Tome", "Armor", "Shield"]
         return Item(
             name=f"{random.choice(prefixes)} {random.choice(item_types)} of {random.choice(suffixes)}",
-            attack=random.randint(1, max(1, level // 2)),
-            defense=random.randint(1, max(1, level // 3)),
-            magic=random.randint(1, max(1, level // 2))
+            attack=random.randint(1, tier*2),
+            defense=random.randint(1, tier*2),
+            magic=random.randint(1, tier*2)
         )
 
-# --- Extended Mob Properties and Creation Functions ---
+# --- Combat System with Status Effects and Weapon-based Effects ---
+class CombatSystem:
+    @staticmethod
+    def calculate_damage(attacker: Character, defender: Character) -> int:
+        base_damage = max(1, (attacker.attack * random.uniform(0.8, 1.2)) -
+                          (defender.defense * random.uniform(0.7, 1.0)))
+        multiplier = 1.0
+        if "Empowered" in attacker.status_effects:
+            multiplier *= 1.2
+        if "Cursed" in attacker.status_effects:
+            multiplier *= 0.5
+        return int(base_damage * multiplier)
 
+    @staticmethod
+    def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
+        print("\n--- COMBAT BEGINS ---")
+        round_counter = 1
+        while any(c.alive for c in player_party) and any(e.alive for e in enemies):
+            print(f"\n--- Round {round_counter} ---")
+            for char in player_party + enemies:
+                if char.alive:
+                    char.process_status_effects()
+                    if char.health <= 0:
+                        print(f"{char.name} has died from status effects!")
+                        char.alive = False
+            # Player party turn
+            for char in player_party:
+                if not char.alive:
+                    continue
+                if "Frozen" in char.status_effects or "Stunned" in char.status_effects:
+                    print(f"{char.name} is unable to act this round!")
+                    continue
+                if isinstance(char, Player):
+                    char.auto_use_consumables()
+                living_enemies = [e for e in enemies if e.alive]
+                if not living_enemies:
+                    break
+                target = random.choice(living_enemies)
+                damage = CombatSystem.calculate_damage(char, target)
+                target.health = max(0, target.health - damage)
+                print(f"{char.name} hits {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+                # --- Elemental Effects (as before) ---
+                chance = 0.10 + (char.attack / 1000)
+                if char.element == Element.FIRE and random.random() < chance and "Burn" not in target.status_effects:
+                    burn_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Burn"] = {"turns": 5, "damage_per_turn": burn_damage}
+                    print(f"{target.name} is burned! (5 turns, {burn_damage} damage per turn)")
+                elif char.element == Element.DARK and random.random() < chance and "Cursed" not in target.status_effects:
+                    target.status_effects["Cursed"] = {"turns": 5}
+                    print(f"{target.name} is cursed! (Damage output halved for 5 turns)")
+                elif char.element == Element.LIGHT and random.random() < chance and "Empowered" not in char.status_effects:
+                    char.status_effects["Empowered"] = {"turns": 5}
+                    print(f"{char.name} is empowered! (Damage increased by 20% for 5 turns)")
+                elif char.element == Element.ICE and random.random() < chance and "Frozen" not in target.status_effects:
+                    target.status_effects["Frozen"] = {"turns": 5}
+                    print(f"{target.name} is frozen and cannot attack for 5 turns!")
+                elif char.element == Element.POISON and random.random() < chance and "Poisoned" not in target.status_effects:
+                    poison_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Poisoned"] = {"turns": 5, "damage_per_turn": poison_damage}
+                    print(f"{target.name} is poisoned! (5 turns, {poison_damage} damage per turn)")
+                elif char.element == Element.LIGHTNING and random.random() < chance and "Shocked" not in target.status_effects:
+                    shock_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Shocked"] = {"turns": 5, "damage_per_turn": shock_damage}
+                    print(f"{target.name} is shocked! (5 turns, {shock_damage} damage per turn)")
+                # --- Weapon-based Extra Effects (if attacker is a Player) ---
+                if isinstance(char, Player):
+                    weapon = char.equipment.get("weapon")
+                    if weapon and weapon.effect and random.random() < (weapon.effect_chance + chance):
+                        if weapon.effect == "Bleed" and "Bleed" not in target.status_effects:
+                            bleed_damage = max(5, int(0.05 * target.max_health))
+                            target.status_effects["Bleed"] = {"turns": 5, "damage_per_turn": bleed_damage}
+                            print(f"{target.name} is bleeding! (5 turns, {bleed_damage} damage per turn)")
+                        elif weapon.effect == "Stun" and "Stunned" not in target.status_effects:
+                            target.status_effects["Stunned"] = {"turns": 1}
+                            print(f"{target.name} is stunned and loses its next turn!")
+            # Enemies turn
+            for enemy in enemies:
+                if not enemy.alive:
+                    continue
+                if "Frozen" in enemy.status_effects or "Stunned" in enemy.status_effects:
+                    print(f"{enemy.name} is unable to act this round!")
+                    continue
+                living_players = [c for c in player_party if c.alive]
+                if not living_players:
+                    break
+                target = random.choice(living_players)
+                damage = CombatSystem.calculate_damage(enemy, target)
+                target.health = max(0, target.health - damage)
+                print(f"{enemy.name} attacks {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+            # Check for deaths
+            for char in player_party + enemies:
+                if char.health <= 0 and char.alive:
+                    print(f"{char.name} has died!")
+                    char.alive = False
+            round_counter += 1
+        return any(c.alive for c in player_party)
+
+class RelationshipSystem:
+    @staticmethod
+    def handle_shared_quest(player: Player, npc: NPC, quest: Quest):
+        relationship_change = random.randint(10, 25)
+        if quest.success:
+            npc.update_relationship(player, relationship_change, f"Successfully completed {quest.description}")
+            player.update_relationship(npc, relationship_change // 2, "Worked well together")
+        else:
+            npc.update_relationship(player, -relationship_change, f"Failed {quest.description}")
+            player.update_relationship(npc, -relationship_change // 2, "Let them down")
+
+    @staticmethod
+    def check_party_morale(party: List[NPC]) -> float:
+        return sum(npc.personality['loyalty'] for npc in party) / len(party) if party else 0
+
+# --- Extended Mob Properties and Creation Functions ---
 def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
     mob_properties = {
         "Slime": {"elements": [Element.WATER, Element.POISON, Element.NATURE],
@@ -356,7 +575,7 @@ def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
         "Werewolf": {"elements": [Element.NATURE, Element.DARK],
                      "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]},
         "Dragon Wyrmling": {"elements": [Element.FIRE, Element.ICE, Element.LIGHTNING],
-                            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
+                           "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
         "Lich": {"elements": [Element.DARK, Element.ICE],
                  "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
         "Ancient Guardian": {"elements": [Element.LIGHT, Element.EARTH],
@@ -382,7 +601,6 @@ def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defe
     return enemy
 
 # --- Shop System ---
-
 class Shop:
     def __init__(self):
         self.inventory = [
@@ -428,133 +646,17 @@ class Shop:
                 print("Invalid selection.")
 
 # --- Game Systems ---
-
+@dataclass
 class Quest:
-    def __init__(self, description: str, difficulty: int, quest_type: str, rewards: dict):
-        self.description = description
-        self.difficulty = difficulty
-        self.type = quest_type
-        self.rewards = rewards
-        self.success: Optional[bool] = None
-
-# --- Combat System with Status Effects and Weapon-based Effects ---
-
-class CombatSystem:
-    @staticmethod
-    def calculate_damage(attacker: Character, defender: Character) -> int:
-        base_damage = max(1, attacker.attack - defender.defense)
-        multiplier = 1.0
-        if "Empowered" in attacker.status_effects:
-            multiplier *= 1.2
-        if "Cursed" in attacker.status_effects:
-            multiplier *= 0.5
-        return int(base_damage * multiplier)
-
-    @staticmethod
-    def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
-        print("\n--- COMBAT BEGINS ---")
-        round_counter = 1
-        while any(c.alive for c in player_party) and any(e.alive for e in enemies):
-            print(f"\n--- Round {round_counter} ---")
-            for char in player_party + enemies:
-                if char.alive:
-                    char.process_status_effects()
-                    if char.health <= 0:
-                        print(f"{char.name} has died from status effects!")
-                        char.alive = False
-
-            # Player party turn
-            for char in player_party:
-                if not char.alive:
-                    continue
-                if "Frozen" in char.status_effects or "Stunned" in char.status_effects:
-                    print(f"{char.name} is unable to act this round!")
-                    continue
-                if isinstance(char, Player):
-                    char.auto_use_consumables()
-                living_enemies = [e for e in enemies if e.alive]
-                if not living_enemies:
-                    break
-                target = random.choice(living_enemies)
-                damage = CombatSystem.calculate_damage(char, target)
-                target.health = max(0, target.health - damage)
-                print(f"{char.name} hits {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
-
-                # --- Elemental Effects (as before) ---
-                chance = 0.10 + (char.attack / 1000)
-                if char.element == Element.FIRE and random.random() < chance and "Burn" not in target.status_effects:
-                    burn_damage = max(5, int(0.05 * target.max_health))
-                    target.status_effects["Burn"] = {"turns": 5, "damage_per_turn": burn_damage}
-                    print(f"{target.name} is burned! (5 turns, {burn_damage} damage per turn)")
-                elif char.element == Element.DARK and random.random() < chance and "Cursed" not in target.status_effects:
-                    target.status_effects["Cursed"] = {"turns": 5}
-                    print(f"{target.name} is cursed! (Damage output halved for 5 turns)")
-                elif char.element == Element.LIGHT and random.random() < chance and "Empowered" not in char.status_effects:
-                    char.status_effects["Empowered"] = {"turns": 5}
-                    print(f"{char.name} is empowered! (Damage increased by 20% for 5 turns)")
-                elif char.element == Element.ICE and random.random() < chance and "Frozen" not in target.status_effects:
-                    target.status_effects["Frozen"] = {"turns": 5}
-                    print(f"{target.name} is frozen and cannot attack for 5 turns!")
-                elif char.element == Element.POISON and random.random() < chance and "Poisoned" not in target.status_effects:
-                    poison_damage = max(5, int(0.05 * target.max_health))
-                    target.status_effects["Poisoned"] = {"turns": 5, "damage_per_turn": poison_damage}
-                    print(f"{target.name} is poisoned! (5 turns, {poison_damage} damage per turn)")
-                elif char.element == Element.LIGHTNING and random.random() < chance and "Shocked" not in target.status_effects:
-                    shock_damage = max(5, int(0.05 * target.max_health))
-                    target.status_effects["Shocked"] = {"turns": 5, "damage_per_turn": shock_damage}
-                    print(f"{target.name} is shocked! (5 turns, {shock_damage} damage per turn)")
-
-                # --- Weapon-based Extra Effects (if attacker is a Player) ---
-                if isinstance(char, Player):
-                    weapon = char.equipment.get("weapon")
-                    if weapon and weapon.effect and random.random() < (weapon.effect_chance + chance):
-                        if weapon.effect == "Bleed" and "Bleed" not in target.status_effects:
-                            bleed_damage = max(5, int(0.05 * target.max_health))
-                            target.status_effects["Bleed"] = {"turns": 5, "damage_per_turn": bleed_damage}
-                            print(f"{target.name} is bleeding! (5 turns, {bleed_damage} damage per turn)")
-                        elif weapon.effect == "Stun" and "Stunned" not in target.status_effects:
-                            target.status_effects["Stunned"] = {"turns": 1}
-                            print(f"{target.name} is stunned and loses its next turn!")
-
-            # Enemies turn
-            for enemy in enemies:
-                if not enemy.alive:
-                    continue
-                if "Frozen" in enemy.status_effects or "Stunned" in enemy.status_effects:
-                    print(f"{enemy.name} is unable to act this round!")
-                    continue
-                living_players = [c for c in player_party if c.alive]
-                if not living_players:
-                    break
-                target = random.choice(living_players)
-                damage = CombatSystem.calculate_damage(enemy, target)
-                target.health = max(0, target.health - damage)
-                print(f"{enemy.name} attacks {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
-            # Check for deaths
-            for char in player_party + enemies:
-                if char.health <= 0 and char.alive:
-                    print(f"{char.name} has died!")
-                    char.alive = False
-            round_counter += 1
-        return any(c.alive for c in player_party)
-
-class RelationshipSystem:
-    @staticmethod
-    def handle_shared_quest(player: Player, npc: NPC, quest: Quest):
-        relationship_change = random.randint(10, 25)
-        if quest.success:
-            npc.update_relationship(player, relationship_change, f"Successfully completed {quest.description}")
-            player.update_relationship(npc, relationship_change // 2, "Worked well together")
-        else:
-            npc.update_relationship(player, -relationship_change, f"Failed {quest.description}")
-            player.update_relationship(npc, -relationship_change // 2, "Let them down")
-
-    @staticmethod
-    def check_party_morale(party: List[NPC]) -> float:
-        return sum(npc.personality['loyalty'] for npc in party) / len(party) if party else 0
+    name: str
+    description: str
+    difficulty: int
+    target: str
+    target_count: int
+    rewards: dict
+    success: Optional[bool] = None
 
 # --- Main Game Loop ---
-
 class Game:
     def __init__(self):
         self.player: Optional[Player] = None
@@ -639,20 +741,16 @@ class Game:
                 print("Invalid option. Try again.")
 
     def quest_system(self):
-        self.current_quest = WorldGenerator.generate_quest(self.player.level)
-        print(f"\nNew Quest: {self.current_quest.description}")
+        self.current_quest = WorldGenerator.generate_quest(self.player.current_rank)
+        print(f"\n[{self.player.current_rank.name}] {self.current_quest.name}")
+        print(f"Description: {self.current_quest.description}")
         print(f"Difficulty: {self.current_quest.difficulty}")
-        est = self.estimate_success_probability(self.current_quest)
-        print(f"Estimated Success Chance: {est}%")
-        if self.player.party:
-            print("\nYour party:")
-            for npc in self.player.party:
-                interest = npc.quest_interest.get(self.current_quest.type, 0)
-                print(f"- {npc.name} ({interest}/10 interest)")
         if input("Accept quest? (y/n): ").lower() == 'y':
             success = self.run_quest()
             self.current_quest.success = success
             self.handle_quest_outcome()
+            if success:
+                self.player.update_rank_progress(self.current_quest.difficulty)
 
     def run_quest(self) -> bool:
         enemies = [WorldGenerator.generate_npc() for _ in range(3)]
