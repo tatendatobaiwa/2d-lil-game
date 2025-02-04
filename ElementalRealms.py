@@ -4,7 +4,8 @@ import random
 import time
 from enum import Enum
 
-# Extended Enums and Constants
+# --- Extended Enums and Constants ---
+
 class Element(Enum):
     FIRE = "Fire"
     WATER = "Water"
@@ -35,7 +36,7 @@ class RelationshipLevel(Enum):
     LIKED = 1
     LOVED = 2
 
-# Updated elemental advantages (adjust as desired)
+# Basic elemental advantages – adjust as needed.
 ADVANTAGES = {
     Element.FIRE.value: [Element.ICE.value, Element.POISON.value, Element.NATURE.value],
     Element.WATER.value: [Element.FIRE.value, Element.LIGHTNING.value],
@@ -49,13 +50,15 @@ ADVANTAGES = {
     Element.POISON.value: [Element.NATURE.value, Element.EARTH.value]
 }
 
-# Core Data Structures
+# --- Core Data Structures ---
+
 @dataclass
 class Relationship:
     level: RelationshipLevel = RelationshipLevel.NEUTRAL
     progress: int = 0
     history: List[str] = field(default_factory=list)
 
+# We now add two new optional fields to items: effect and effect_chance.
 @dataclass
 class Item:
     name: str
@@ -63,9 +66,11 @@ class Item:
     defense: int = 0
     magic: int = 0
     value: int = 0
+    effect: Optional[str] = None         # For example: "Bleed", "Stun"
+    effect_chance: float = 0.0           # Extra chance (in decimal) to trigger the effect
 
     def __post_init__(self):
-        # Price is auto–generated if not explicitly set.
+        # Auto–generate a price if not explicitly set.
         self.value = (self.attack + self.defense + self.magic) * 10 + random.randint(10, 50)
 
     def __str__(self):
@@ -76,9 +81,12 @@ class Item:
             stats.append(f"DEF +{self.defense}")
         if self.magic > 0:
             stats.append(f"MAG +{self.magic}")
-        return f"{self.name} ({', '.join(stats)})"
+        extra = ""
+        if self.effect:
+            extra = f", Effect: {self.effect} ({int(self.effect_chance*100)}% chance)"
+        return f"{self.name} ({', '.join(stats)}{extra})"
 
-# Consumable items (e.g., Health Potions, Throwables)
+# Consumable items (e.g., Health Potions)
 class Consumable(Item):
     def __init__(self, name: str, heal_value: int = 0, throw_damage: int = 0):
         super().__init__(name)
@@ -93,7 +101,7 @@ class Consumable(Item):
         else:
             return self.name
 
-# Equipment detection helper – determines which slot an item belongs to.
+# Helper: determine equipment slot from item name.
 def determine_slot(item: Item) -> Optional[str]:
     name = item.name.lower()
     if "sword" in name or "wand" in name or "tome" in name:
@@ -106,7 +114,13 @@ def determine_slot(item: Item) -> Optional[str]:
         return "accessory"
     return None
 
-# Base Character classes
+# --- Status Effects System ---
+# Effects are stored as entries in a dictionary (key: effect name).
+# Each effect has a "turns" counter and may have "damage_per_turn".
+# Some effects modify multipliers (e.g., Empowered, Cursed) or prevent actions (Frozen, Stun).
+
+# --- Base Character Classes ---
+
 class Character:
     def __init__(self, name: str, health: int, attack: int, defense: int, magic: int, element: Element, alignment: Alignment):
         self.name = name
@@ -128,6 +142,8 @@ class Character:
             'greed': random.randint(1, 10)
         }
         self.alive: bool = True
+        # Status effects: keys are effect names, values are dicts with effect data.
+        self.status_effects: Dict[str, Dict] = {}
 
     def update_relationship(self, other: 'Character', change: int, reason: str):
         if other.name not in self.relationships:
@@ -142,6 +158,20 @@ class Character:
             rel.level = RelationshipLevel(rel.level.value - 1)
             rel.progress = 0
 
+    def process_status_effects(self):
+        # Process each active effect.
+        for effect_name in list(self.status_effects.keys()):
+            effect = self.status_effects[effect_name]
+            # Effects that deal damage each turn.
+            if effect_name in ["Burn", "Poisoned", "Shocked"]:
+                self.health -= effect["damage_per_turn"]
+                print(f"{self.name} suffers {effect['damage_per_turn']} damage from {effect_name} (turns left: {effect['turns']-1}).")
+            # Decrement turns for every effect.
+            effect["turns"] -= 1
+            if effect["turns"] <= 0:
+                print(f"{self.name} is no longer affected by {effect_name}.")
+                del self.status_effects[effect_name]
+
 class Player(Character):
     def __init__(self, name: str, char_class: str, element: Element, alignment: Alignment):
         base_stats = {
@@ -149,28 +179,20 @@ class Player(Character):
             'Mage': (80, 5, 5, 20),
             'Rogue': (90, 10, 8, 12)
         }
-        # Initialize using the chosen class's stats
         super().__init__(name, *base_stats[char_class], element, alignment)
         self.char_class = char_class
         self.party: List['NPC'] = []
         self.completed_quests: int = 0
-        # Store base stats for equipment calculations.
         self.base_health = self.max_health
         self.base_attack = self.attack
         self.base_defense = self.defense
         self.base_magic = self.magic_power
-        # Equipment slots: weapon, armor, shield, accessory.
         self.equipment: Dict[str, Optional[Item]] = {"weapon": None, "armor": None, "shield": None, "accessory": None}
 
     def recalc_stats(self):
-        bonus_attack = 0
-        bonus_defense = 0
-        bonus_magic = 0
-        for slot, item in self.equipment.items():
-            if item:
-                bonus_attack += item.attack
-                bonus_defense += item.defense
-                bonus_magic += item.magic
+        bonus_attack = sum(item.attack for item in self.equipment.values() if item)
+        bonus_defense = sum(item.defense for item in self.equipment.values() if item)
+        bonus_magic = sum(item.magic for item in self.equipment.values() if item)
         self.attack = self.base_attack + bonus_attack
         self.defense = self.base_defense + bonus_defense
         self.magic_power = self.base_magic + bonus_magic
@@ -191,12 +213,10 @@ class Player(Character):
             self.exp -= required_exp
             self.level += 1
             leveled_up = True
-            # Increase base stats on level up.
             self.base_health += 10
             self.base_attack += 2
             self.base_defense += 2
             self.base_magic += 2
-            # Restore health to new max.
             self.max_health = self.base_health
             self.health = self.max_health
             print(f"\n*** Congratulations! You've leveled up to Level {self.level}! ***")
@@ -236,7 +256,8 @@ class NPC(Character):
             'social': random.randint(0, 10)
         }
 
-# Procedural Generation Systems
+# --- Procedural Generation Systems ---
+
 class WorldGenerator:
     @staticmethod
     def generate_npc() -> NPC:
@@ -296,66 +317,38 @@ class ItemGenerator:
             magic=random.randint(1, max(1, level // 2))
         )
 
-# Extended Mob Properties and Creation Functions
+# --- Extended Mob Properties and Creation Functions ---
+
 def get_mob_properties(mob_name: str) -> Dict[str, List[Enum]]:
     mob_properties = {
-        "Slime": {
-            "elements": [Element.WATER, Element.POISON, Element.NATURE],
-            "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]
-        },
-        "Goblin": {
-            "elements": [Element.EARTH, Element.FIRE, Element.DARK],
-            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
-        },
-        "Shadow Beast": {
-            "elements": [Element.DARK],
-            "alignments": [Alignment.CHAOTIC_EVIL, Alignment.NEUTRAL_EVIL]
-        },
-        "Rat": {
-            "elements": [Element.EARTH, Element.POISON],
-            "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]
-        },
-        "Spider": {
-            "elements": [Element.POISON, Element.DARK],
-            "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_NEUTRAL]
-        },
-        "Skeleton": {
-            "elements": [Element.DARK],
-            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
-        },
-        "Dark Mage": {
-            "elements": [Element.DARK, Element.FIRE, Element.ICE],
-            "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_EVIL]
-        },
-        "Stone Golem": {
-            "elements": [Element.EARTH],
-            "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.TRUE_NEUTRAL]
-        },
-        "Harpy": {
-            "elements": [Element.AIR, Element.LIGHTNING],
-            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
-        },
-        "Werewolf": {
-            "elements": [Element.NATURE, Element.DARK],
-            "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]
-        },
-        "Dragon Wyrmling": {
-            "elements": [Element.FIRE, Element.ICE, Element.LIGHTNING],
-            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
-        },
-        "Lich": {
-            "elements": [Element.DARK, Element.ICE],
-            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]
-        },
-        "Ancient Guardian": {
-            "elements": [Element.LIGHT, Element.EARTH],
-            "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.LAWFUL_EVIL]
-        }
+        "Slime": {"elements": [Element.WATER, Element.POISON, Element.NATURE],
+                  "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]},
+        "Goblin": {"elements": [Element.EARTH, Element.FIRE, Element.DARK],
+                   "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]},
+        "Shadow Beast": {"elements": [Element.DARK],
+                         "alignments": [Alignment.CHAOTIC_EVIL, Alignment.NEUTRAL_EVIL]},
+        "Rat": {"elements": [Element.EARTH, Element.POISON],
+                "alignments": [Alignment.TRUE_NEUTRAL, Alignment.CHAOTIC_NEUTRAL]},
+        "Spider": {"elements": [Element.POISON, Element.DARK],
+                   "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_NEUTRAL]},
+        "Skeleton": {"elements": [Element.DARK],
+                     "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
+        "Dark Mage": {"elements": [Element.DARK, Element.FIRE, Element.ICE],
+                      "alignments": [Alignment.NEUTRAL_EVIL, Alignment.CHAOTIC_EVIL]},
+        "Stone Golem": {"elements": [Element.EARTH],
+                        "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.TRUE_NEUTRAL]},
+        "Harpy": {"elements": [Element.AIR, Element.LIGHTNING],
+                  "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]},
+        "Werewolf": {"elements": [Element.NATURE, Element.DARK],
+                     "alignments": [Alignment.CHAOTIC_NEUTRAL, Alignment.CHAOTIC_EVIL]},
+        "Dragon Wyrmling": {"elements": [Element.FIRE, Element.ICE, Element.LIGHTNING],
+                            "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
+        "Lich": {"elements": [Element.DARK, Element.ICE],
+                 "alignments": [Alignment.LAWFUL_EVIL, Alignment.NEUTRAL_EVIL]},
+        "Ancient Guardian": {"elements": [Element.LIGHT, Element.EARTH],
+                             "alignments": [Alignment.LAWFUL_NEUTRAL, Alignment.LAWFUL_EVIL]}
     }
-    default_properties = {
-        "elements": [Element.DARK],
-        "alignments": [Alignment.NEUTRAL_EVIL]
-    }
+    default_properties = {"elements": [Element.DARK], "alignments": [Alignment.NEUTRAL_EVIL]}
     return mob_properties.get(mob_name, default_properties)
 
 def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defense: int, enemy_magic: int) -> NPC:
@@ -374,7 +367,8 @@ def create_enemy(mob_name: str, enemy_health: int, enemy_attack: int, enemy_defe
         setattr(enemy, stat, int(current_value * variation))
     return enemy
 
-# Shop System
+# --- Shop System ---
+
 class Shop:
     def __init__(self):
         self.inventory = [
@@ -384,6 +378,9 @@ class Shop:
             {"item": Consumable("Health Potion", heal_value=50), "price": 50},
             {"item": Item("Enchanted Shield", defense=4), "price": 130},
             {"item": Item("Spell Tome", magic=5), "price": 110},
+            # New weapons with extra effects:
+            {"item": Item("Crimson Sword", attack=7, effect="Bleed", effect_chance=0.15), "price": 150},
+            {"item": Item("Thunder Hammer", attack=8, effect="Stun", effect_chance=0.15), "price": 180},
         ]
 
     def enter_shop(self, player: Player):
@@ -416,7 +413,8 @@ class Shop:
             else:
                 print("Invalid selection.")
 
-# Game Systems
+# --- Game Systems ---
+
 class Quest:
     def __init__(self, description: str, difficulty: int, quest_type: str, rewards: dict):
         self.description = description
@@ -425,19 +423,38 @@ class Quest:
         self.rewards = rewards
         self.success: Optional[bool] = None
 
+# --- Combat System with Status Effects and Weapon-based Effects ---
+
 class CombatSystem:
     @staticmethod
     def calculate_damage(attacker: Character, defender: Character) -> int:
-        element_multiplier = 1.5 if defender.element.value in ADVANTAGES.get(attacker.element.value, []) else 1.0
-        base_damage = max(1, (attacker.attack - defender.defense))
-        return int(base_damage * element_multiplier)
+        base_damage = max(1, attacker.attack - defender.defense)
+        multiplier = 1.0
+        if "Empowered" in attacker.status_effects:
+            multiplier *= 1.2
+        if "Cursed" in attacker.status_effects:
+            multiplier *= 0.5
+        return int(base_damage * multiplier)
 
     @staticmethod
     def party_vs_enemies(player_party: List[Character], enemies: List[Character]) -> bool:
         print("\n--- COMBAT BEGINS ---")
+        round_counter = 1
         while any(c.alive for c in player_party) and any(e.alive for e in enemies):
+            print(f"\n--- Round {round_counter} ---")
+            for char in player_party + enemies:
+                if char.alive:
+                    char.process_status_effects()
+                    if char.health <= 0:
+                        print(f"{char.name} has died from status effects!")
+                        char.alive = False
+
+            # Player party turn
             for char in player_party:
                 if not char.alive:
+                    continue
+                if "Frozen" in char.status_effects or "Stunned" in char.status_effects:
+                    print(f"{char.name} is unable to act this round!")
                     continue
                 if isinstance(char, Player):
                     char.auto_use_consumables()
@@ -448,8 +465,49 @@ class CombatSystem:
                 damage = CombatSystem.calculate_damage(char, target)
                 target.health = max(0, target.health - damage)
                 print(f"{char.name} hits {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+
+                # --- Elemental Effects (as before) ---
+                chance = 0.10 + (char.attack / 1000)
+                if char.element == Element.FIRE and random.random() < chance and "Burn" not in target.status_effects:
+                    burn_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Burn"] = {"turns": 5, "damage_per_turn": burn_damage}
+                    print(f"{target.name} is burned! (5 turns, {burn_damage} damage per turn)")
+                elif char.element == Element.DARK and random.random() < chance and "Cursed" not in target.status_effects:
+                    target.status_effects["Cursed"] = {"turns": 5}
+                    print(f"{target.name} is cursed! (Damage output halved for 5 turns)")
+                elif char.element == Element.LIGHT and random.random() < chance and "Empowered" not in char.status_effects:
+                    char.status_effects["Empowered"] = {"turns": 5}
+                    print(f"{char.name} is empowered! (Damage increased by 20% for 5 turns)")
+                elif char.element == Element.ICE and random.random() < chance and "Frozen" not in target.status_effects:
+                    target.status_effects["Frozen"] = {"turns": 5}
+                    print(f"{target.name} is frozen and cannot attack for 5 turns!")
+                elif char.element == Element.POISON and random.random() < chance and "Poisoned" not in target.status_effects:
+                    poison_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Poisoned"] = {"turns": 5, "damage_per_turn": poison_damage}
+                    print(f"{target.name} is poisoned! (5 turns, {poison_damage} damage per turn)")
+                elif char.element == Element.LIGHTNING and random.random() < chance and "Shocked" not in target.status_effects:
+                    shock_damage = max(5, int(0.05 * target.max_health))
+                    target.status_effects["Shocked"] = {"turns": 5, "damage_per_turn": shock_damage}
+                    print(f"{target.name} is shocked! (5 turns, {shock_damage} damage per turn)")
+
+                # --- Weapon-based Extra Effects (if attacker is a Player) ---
+                if isinstance(char, Player):
+                    weapon = char.equipment.get("weapon")
+                    if weapon and weapon.effect and random.random() < (weapon.effect_chance + chance):
+                        if weapon.effect == "Bleed" and "Bleed" not in target.status_effects:
+                            bleed_damage = max(5, int(0.05 * target.max_health))
+                            target.status_effects["Bleed"] = {"turns": 5, "damage_per_turn": bleed_damage}
+                            print(f"{target.name} is bleeding! (5 turns, {bleed_damage} damage per turn)")
+                        elif weapon.effect == "Stun" and "Stunned" not in target.status_effects:
+                            target.status_effects["Stunned"] = {"turns": 1}
+                            print(f"{target.name} is stunned and loses its next turn!")
+
+            # Enemies turn
             for enemy in enemies:
                 if not enemy.alive:
+                    continue
+                if "Frozen" in enemy.status_effects or "Stunned" in enemy.status_effects:
+                    print(f"{enemy.name} is unable to act this round!")
                     continue
                 living_players = [c for c in player_party if c.alive]
                 if not living_players:
@@ -458,10 +516,12 @@ class CombatSystem:
                 damage = CombatSystem.calculate_damage(enemy, target)
                 target.health = max(0, target.health - damage)
                 print(f"{enemy.name} attacks {target.name} for {damage} damage! (HP: {target.health}/{target.max_health})")
+            # Check for deaths
             for char in player_party + enemies:
                 if char.health <= 0 and char.alive:
                     print(f"{char.name} has died!")
                     char.alive = False
+            round_counter += 1
         return any(c.alive for c in player_party)
 
 class RelationshipSystem:
@@ -479,7 +539,8 @@ class RelationshipSystem:
     def check_party_morale(party: List[NPC]) -> float:
         return sum(npc.personality['loyalty'] for npc in party) / len(party) if party else 0
 
-# Main Game Loop
+# --- Main Game Loop ---
+
 class Game:
     def __init__(self):
         self.player: Optional[Player] = None
@@ -729,71 +790,19 @@ class Game:
     def travel_farm_exp(self):
         print("\nYou head to a training area to farm experience.")
         farming_locations = {
-            "Glistening Grove": {
-                "mob_name": "Slime",
-                "difficulty_multiplier": 0.8,
-                "base_exp": 20
-            },
-            "Crimson Cavern": {
-                "mob_name": "Goblin",
-                "difficulty_multiplier": 1.0,
-                "base_exp": 40
-            },
-            "Darkened Depths": {
-                "mob_name": "Shadow Beast",
-                "difficulty_multiplier": 1.2,
-                "base_exp": 60
-            },
-            "Abandoned Sewers": {
-                "mob_name": "Rat",
-                "difficulty_multiplier": 0.6,
-                "base_exp": 15
-            },
-            "Webbed Forest": {
-                "mob_name": "Spider",
-                "difficulty_multiplier": 0.7,
-                "base_exp": 25
-            },
-            "Ancient Catacombs": {
-                "mob_name": "Skeleton",
-                "difficulty_multiplier": 1.1,
-                "base_exp": 45
-            },
-            "Forbidden Library": {
-                "mob_name": "Dark Mage",
-                "difficulty_multiplier": 1.3,
-                "base_exp": 55
-            },
-            "Crystal Mines": {
-                "mob_name": "Stone Golem",
-                "difficulty_multiplier": 1.4,
-                "base_exp": 65
-            },
-            "Windswept Peaks": {
-                "mob_name": "Harpy",
-                "difficulty_multiplier": 1.2,
-                "base_exp": 50
-            },
-            "Moonlit Grove": {
-                "mob_name": "Werewolf",
-                "difficulty_multiplier": 1.5,
-                "base_exp": 70
-            },
-            "Dragon's Roost": {
-                "mob_name": "Dragon Wyrmling",
-                "difficulty_multiplier": 1.7,
-                "base_exp": 80
-            },
-            "Cursed Sanctum": {
-                "mob_name": "Lich",
-                "difficulty_multiplier": 1.8,
-                "base_exp": 85
-            },
-            "Temple Ruins": {
-                "mob_name": "Ancient Guardian",
-                "difficulty_multiplier": 1.9,
-                "base_exp": 90
-            }
+            "Glistening Grove": {"mob_name": "Slime", "difficulty_multiplier": 0.8, "base_exp": 20},
+            "Crimson Cavern": {"mob_name": "Goblin", "difficulty_multiplier": 1.0, "base_exp": 40},
+            "Darkened Depths": {"mob_name": "Shadow Beast", "difficulty_multiplier": 1.2, "base_exp": 60},
+            "Abandoned Sewers": {"mob_name": "Rat", "difficulty_multiplier": 0.6, "base_exp": 15},
+            "Webbed Forest": {"mob_name": "Spider", "difficulty_multiplier": 0.7, "base_exp": 25},
+            "Ancient Catacombs": {"mob_name": "Skeleton", "difficulty_multiplier": 1.1, "base_exp": 45},
+            "Forbidden Library": {"mob_name": "Dark Mage", "difficulty_multiplier": 1.3, "base_exp": 55},
+            "Crystal Mines": {"mob_name": "Stone Golem", "difficulty_multiplier": 1.4, "base_exp": 65},
+            "Windswept Peaks": {"mob_name": "Harpy", "difficulty_multiplier": 1.2, "base_exp": 50},
+            "Moonlit Grove": {"mob_name": "Werewolf", "difficulty_multiplier": 1.5, "base_exp": 70},
+            "Dragon's Roost": {"mob_name": "Dragon Wyrmling", "difficulty_multiplier": 1.7, "base_exp": 80},
+            "Cursed Sanctum": {"mob_name": "Lich", "difficulty_multiplier": 1.8, "base_exp": 85},
+            "Temple Ruins": {"mob_name": "Ancient Guardian", "difficulty_multiplier": 1.9, "base_exp": 90}
         }
         print("\nAvailable Locations:")
         for i, (loc, data) in enumerate(farming_locations.items(), 1):
@@ -814,75 +823,33 @@ class Game:
         mob_name = location_data['mob_name']
         enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
         if mob_name == "Slime":
-            enemy_health = 30 * enemy_level
-            enemy_attack = 3 * enemy_level
-            enemy_defense = 1 * enemy_level
-            enemy_magic = 1 * enemy_level
+            enemy_health = 30 * enemy_level; enemy_attack = 3 * enemy_level; enemy_defense = 1 * enemy_level; enemy_magic = 1 * enemy_level
         elif mob_name == "Goblin":
-            enemy_health = 50 * enemy_level
-            enemy_attack = 5 * enemy_level
-            enemy_defense = 3 * enemy_level
-            enemy_magic = 2 * enemy_level
+            enemy_health = 50 * enemy_level; enemy_attack = 5 * enemy_level; enemy_defense = 3 * enemy_level; enemy_magic = 2 * enemy_level
         elif mob_name == "Shadow Beast":
-            enemy_health = 70 * enemy_level
-            enemy_attack = 7 * enemy_level
-            enemy_defense = 4 * enemy_level
-            enemy_magic = 3 * enemy_level
+            enemy_health = 70 * enemy_level; enemy_attack = 7 * enemy_level; enemy_defense = 4 * enemy_level; enemy_magic = 3 * enemy_level
         elif mob_name == "Rat":
-            enemy_health = 25 * enemy_level
-            enemy_attack = 4 * enemy_level
-            enemy_defense = 1 * enemy_level
-            enemy_magic = 0 * enemy_level
+            enemy_health = 25 * enemy_level; enemy_attack = 4 * enemy_level; enemy_defense = 1 * enemy_level; enemy_magic = 0 * enemy_level
         elif mob_name == "Spider":
-            enemy_health = 35 * enemy_level
-            enemy_attack = 3 * enemy_level
-            enemy_defense = 2 * enemy_level
-            enemy_magic = 3 * enemy_level
+            enemy_health = 35 * enemy_level; enemy_attack = 3 * enemy_level; enemy_defense = 2 * enemy_level; enemy_magic = 3 * enemy_level
         elif mob_name == "Skeleton":
-            enemy_health = 45 * enemy_level
-            enemy_attack = 6 * enemy_level
-            enemy_defense = 3 * enemy_level
-            enemy_magic = 1 * enemy_level
+            enemy_health = 45 * enemy_level; enemy_attack = 6 * enemy_level; enemy_defense = 3 * enemy_level; enemy_magic = 1 * enemy_level
         elif mob_name == "Dark Mage":
-            enemy_health = 40 * enemy_level
-            enemy_attack = 2 * enemy_level
-            enemy_defense = 2 * enemy_level
-            enemy_magic = 8 * enemy_level
+            enemy_health = 40 * enemy_level; enemy_attack = 2 * enemy_level; enemy_defense = 2 * enemy_level; enemy_magic = 8 * enemy_level
         elif mob_name == "Stone Golem":
-            enemy_health = 100 * enemy_level
-            enemy_attack = 4 * enemy_level
-            enemy_defense = 8 * enemy_level
-            enemy_magic = 0 * enemy_level
+            enemy_health = 100 * enemy_level; enemy_attack = 4 * enemy_level; enemy_defense = 8 * enemy_level; enemy_magic = 0 * enemy_level
         elif mob_name == "Harpy":
-            enemy_health = 45 * enemy_level
-            enemy_attack = 6 * enemy_level
-            enemy_defense = 2 * enemy_level
-            enemy_magic = 3 * enemy_level
+            enemy_health = 45 * enemy_level; enemy_attack = 6 * enemy_level; enemy_defense = 2 * enemy_level; enemy_magic = 3 * enemy_level
         elif mob_name == "Werewolf":
-            enemy_health = 65 * enemy_level
-            enemy_attack = 8 * enemy_level
-            enemy_defense = 4 * enemy_level
-            enemy_magic = 1 * enemy_level
+            enemy_health = 65 * enemy_level; enemy_attack = 8 * enemy_level; enemy_defense = 4 * enemy_level; enemy_magic = 1 * enemy_level
         elif mob_name == "Dragon Wyrmling":
-            enemy_health = 85 * enemy_level
-            enemy_attack = 7 * enemy_level
-            enemy_defense = 6 * enemy_level
-            enemy_magic = 6 * enemy_level
+            enemy_health = 85 * enemy_level; enemy_attack = 7 * enemy_level; enemy_defense = 6 * enemy_level; enemy_magic = 6 * enemy_level
         elif mob_name == "Lich":
-            enemy_health = 75 * enemy_level
-            enemy_attack = 4 * enemy_level
-            enemy_defense = 5 * enemy_level
-            enemy_magic = 10 * enemy_level
+            enemy_health = 75 * enemy_level; enemy_attack = 4 * enemy_level; enemy_defense = 5 * enemy_level; enemy_magic = 10 * enemy_level
         elif mob_name == "Ancient Guardian":
-            enemy_health = 120 * enemy_level
-            enemy_attack = 6 * enemy_level
-            enemy_defense = 9 * enemy_level
-            enemy_magic = 4 * enemy_level
+            enemy_health = 120 * enemy_level; enemy_attack = 6 * enemy_level; enemy_defense = 9 * enemy_level; enemy_magic = 4 * enemy_level
         else:
-            enemy_health = 40 * enemy_level
-            enemy_attack = 4 * enemy_level
-            enemy_defense = 2 * enemy_level
-            enemy_magic = 2 * enemy_level
+            enemy_health = 40 * enemy_level; enemy_attack = 4 * enemy_level; enemy_defense = 2 * enemy_level; enemy_magic = 2 * enemy_level
         enemy = create_enemy(mob_name, enemy_health, enemy_attack, enemy_defense, enemy_magic)
         print(f"A wild {mob_name} (Level {enemy_level}) appears!")
         print(f"Stats -> HP: {enemy.health}, ATK: {enemy.attack}, DEF: {enemy.defense}, MAG: {enemy.magic_power}")
