@@ -506,37 +506,137 @@ class Game:
                 "mob_name": "Shadow Beast",
                 "difficulty_multiplier": 1.2,
                 "base_exp": 60
+            },
+            "Abandoned Sewers": {
+                "mob_name": "Rat",
+                "difficulty_multiplier": 0.6,
+                "base_exp": 15
+            },
+            "Webbed Forest": {
+                "mob_name": "Spider",
+                "difficulty_multiplier": 0.7,
+                "base_exp": 25
+            },
+            "Ancient Catacombs": {
+                "mob_name": "Skeleton",
+                "difficulty_multiplier": 1.1,
+                "base_exp": 45
+            },
+            "Forbidden Library": {
+                "mob_name": "Dark Mage",
+                "difficulty_multiplier": 1.3,
+                "base_exp": 55
+            },
+            "Crystal Mines": {
+                "mob_name": "Stone Golem",
+                "difficulty_multiplier": 1.4,
+                "base_exp": 65
+            },
+            "Windswept Peaks": {
+                "mob_name": "Harpy",
+                "difficulty_multiplier": 1.2,
+                "base_exp": 50
+            },
+            "Moonlit Grove": {
+                "mob_name": "Werewolf",
+                "difficulty_multiplier": 1.5,
+                "base_exp": 70
+            },
+            "Dragon's Roost": {
+                "mob_name": "Dragon Wyrmling",
+                "difficulty_multiplier": 1.7,
+                "base_exp": 80
+            },
+            "Cursed Sanctum": {
+                "mob_name": "Lich",
+                "difficulty_multiplier": 1.8,
+                "base_exp": 85
+            },
+            "Temple Ruins": {
+                "mob_name": "Ancient Guardian",
+                "difficulty_multiplier": 1.9,
+                "base_exp": 90
             }
         }
         location_name = random.choice(list(farming_locations.keys()))
         location_data = farming_locations[location_name]
         print(f"\nYou arrive at {location_name}.")
         
-        # Calculate enemy level based on player's level and location difficulty.
+       # Calculate enemy level based on player's level and location difficulty.
         enemy_level = max(1, int(self.player.level * location_data['difficulty_multiplier']))
         mob_name = location_data['mob_name']
-        
+
         # Create enemy stats based on mob type.
-        if mob_name == "Slime":
+        if mob_name == "Slime":  # Weak starter enemy
             enemy_health = 30 * enemy_level
             enemy_attack = 3 * enemy_level
             enemy_defense = 1 * enemy_level
             enemy_magic = 1 * enemy_level
-        elif mob_name == "Goblin":
+        elif mob_name == "Goblin":  # Basic melee enemy
             enemy_health = 50 * enemy_level
             enemy_attack = 5 * enemy_level
             enemy_defense = 3 * enemy_level
             enemy_magic = 2 * enemy_level
-        elif mob_name == "Shadow Beast":
+        elif mob_name == "Shadow Beast":  # Advanced enemy
             enemy_health = 70 * enemy_level
             enemy_attack = 7 * enemy_level
             enemy_defense = 4 * enemy_level
             enemy_magic = 3 * enemy_level
-        else:
+        elif mob_name == "Rat":  # Weak enemy, fast attacks
+            enemy_health = 25 * enemy_level
+            enemy_attack = 4 * enemy_level
+            enemy_defense = 1 * enemy_level
+            enemy_magic = 0 * enemy_level
+        elif mob_name == "Spider":  # Weak enemy with poison potential
+            enemy_health = 35 * enemy_level
+            enemy_attack = 3 * enemy_level
+            enemy_defense = 2 * enemy_level
+            enemy_magic = 3 * enemy_level
+        elif mob_name == "Skeleton":  # Undead warrior
+            enemy_health = 45 * enemy_level
+            enemy_attack = 6 * enemy_level
+            enemy_defense = 3 * enemy_level
+            enemy_magic = 1 * enemy_level
+        elif mob_name == "Dark Mage":  # Magic focused enemy
+            enemy_health = 40 * enemy_level
+            enemy_attack = 2 * enemy_level
+            enemy_defense = 2 * enemy_level
+            enemy_magic = 8 * enemy_level
+        elif mob_name == "Stone Golem":  # High defense enemy
+            enemy_health = 100 * enemy_level
+            enemy_attack = 4 * enemy_level
+            enemy_defense = 8 * enemy_level
+            enemy_magic = 0 * enemy_level
+        elif mob_name == "Harpy":  # Fast flying enemy
+            enemy_health = 45 * enemy_level
+            enemy_attack = 6 * enemy_level
+            enemy_defense = 2 * enemy_level
+            enemy_magic = 3 * enemy_level
+        elif mob_name == "Werewolf":  # Strong physical attacker
+            enemy_health = 65 * enemy_level
+            enemy_attack = 8 * enemy_level
+            enemy_defense = 4 * enemy_level
+            enemy_magic = 1 * enemy_level
+        elif mob_name == "Dragon Wyrmling":  # Mini boss type
+            enemy_health = 85 * enemy_level
+            enemy_attack = 7 * enemy_level
+            enemy_defense = 6 * enemy_level
+            enemy_magic = 6 * enemy_level
+        elif mob_name == "Lich":  # Powerful magic boss
+            enemy_health = 75 * enemy_level
+            enemy_attack = 4 * enemy_level
+            enemy_defense = 5 * enemy_level
+            enemy_magic = 10 * enemy_level
+        elif mob_name == "Ancient Guardian":  # Defensive boss
+            enemy_health = 120 * enemy_level
+            enemy_attack = 6 * enemy_level
+            enemy_defense = 9 * enemy_level
+            enemy_magic = 4 * enemy_level
+        else:  # Default enemy stats
             enemy_health = 40 * enemy_level
             enemy_attack = 4 * enemy_level
             enemy_defense = 2 * enemy_level
-            enemy_magic = 2 * enemy_level
+        enemy_magic = 2 * enemy_level
         
         # Create a custom enemy. Here, we use a dummy NPC with fixed element and alignment.
         enemy = NPC(name=mob_name, element=Element.DARK, alignment=Alignment.CHAOTIC_EVIL)
