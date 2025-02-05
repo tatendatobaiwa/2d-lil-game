@@ -4,51 +4,10 @@ import random
 import time
 from enum import Enum
 import threading
-from playsound import playsound
 from colorama import init, Fore, Back, Style
 
 # Initialize Colorama
 init(autoreset=True)
-
-# --- Music Player using playsound in a thread ---
-class MusicPlayer:
-    def __init__(self):
-        self.thread = None
-        self.stop_event = threading.Event()
-        self.track = None
-
-    def play(self, track, loop=False):
-        self.stop()  # Stop any currently playing track
-        self.track = track
-        self.stop_event.clear()
-        if loop:
-            self.thread = threading.Thread(target=self._play_loop, args=())
-        else:
-            self.thread = threading.Thread(target=self._play_once, args=())
-        self.thread.daemon = True
-        self.thread.start()
-
-    def _play_once(self):
-        try:
-            playsound(self.track)
-        except Exception as e:
-            print(Fore.RED + f"[Audio Error] {e}")
-
-    def _play_loop(self):
-        while not self.stop_event.is_set():
-            try:
-                playsound(self.track)
-            except Exception as e:
-                print(Fore.RED + f"[Audio Error] {e}")
-                break
-
-    def stop(self):
-        if self.thread and self.thread.is_alive():
-            self.stop_event.set()
-            self.thread.join()
-
-# Create a global MusicPlayer instance
-music_player = MusicPlayer()
 
 # --- Extended Enums and Constants ---
 class Element(Enum):
@@ -128,7 +87,7 @@ class Item:
 
     def __str__(self):
         stats = []
-        if self.attack > 0:
+        if self.attack > 0: 
             stats.append(f"ATK +{self.attack}")
         if self.defense > 0:
             stats.append(f"DEF +{self.defense}")
@@ -731,7 +690,6 @@ class Game:
  |_____|_|\___||___/\__|\__,_|_|  \___| |_____|_| |_|\___|_|\_\___|_|   
         """ + Style.RESET_ALL)
         print(Back.BLACK + Fore.YELLOW + "Welcome to Elemental Realms!" + Style.RESET_ALL)
-        music_player.play("audio/main_menu.mp3", loop=True)
         time.sleep(1)
 
     def character_creation(self):
@@ -778,14 +736,12 @@ class Game:
             input(Fore.YELLOW + "Press Enter to continue...")
         print(Fore.RED + "\n*** FINAL BATTLE: Demon Lord ***")
         # Switch music for battle
-        music_player.stop()
-        music_player.play("audio/battle_intense.mp3", loop=True)
+        
         demon_lord = create_enemy("Demon Lord", enemy_health=200, enemy_attack=20, enemy_defense=10, enemy_magic=15)
         print(Fore.RED + "You face the Demon Lord!")
         party = [self.player] + self.player.party
         victory = CombatSystem.party_vs_enemies([c for c in party if c.alive], [demon_lord])
-        music_player.stop()
-        music_player.play("audio/main_menu.mp3", loop=True)
+        
         if victory:
             print(Fore.GREEN + "\nYou have defeated the Demon Lord and restored peace to the realm!")
         else:
@@ -850,7 +806,6 @@ class Game:
                 self.main_story()
             elif choice == '9':
                 print(Fore.CYAN + "Thanks for playing Elemental Realms!")
-                music_player.stop()
                 break
             else:
                 print(Fore.RED + "Invalid option. Try again.")
@@ -1027,19 +982,19 @@ class Game:
     def travel_farm_exp(self):
         print(Fore.CYAN + "\nYou head to a training area to farm experience.")
         farming_locations = {
-            "Glistening Grove": {"mob_name": "Slime", "difficulty_multiplier": 0.8, "base_exp": 20},
-            "Crimson Cavern": {"mob_name": "Goblin", "difficulty_multiplier": 1.0, "base_exp": 40},
-            "Darkened Depths": {"mob_name": "Shadow Beast", "difficulty_multiplier": 1.2, "base_exp": 60},
-            "Abandoned Sewers": {"mob_name": "Rat", "difficulty_multiplier": 0.6, "base_exp": 15},
-            "Webbed Forest": {"mob_name": "Spider", "difficulty_multiplier": 0.7, "base_exp": 25},
-            "Ancient Catacombs": {"mob_name": "Skeleton", "difficulty_multiplier": 1.1, "base_exp": 45},
-            "Forbidden Library": {"mob_name": "Dark Mage", "difficulty_multiplier": 1.3, "base_exp": 55},
-            "Crystal Mines": {"mob_name": "Stone Golem", "difficulty_multiplier": 1.4, "base_exp": 65},
-            "Windswept Peaks": {"mob_name": "Harpy", "difficulty_multiplier": 1.2, "base_exp": 50},
-            "Moonlit Grove": {"mob_name": "Werewolf", "difficulty_multiplier": 1.5, "base_exp": 70},
-            "Dragon's Roost": {"mob_name": "Dragon Wyrmling", "difficulty_multiplier": 1.7, "base_exp": 80},
-            "Cursed Sanctum": {"mob_name": "Lich", "difficulty_multiplier": 1.8, "base_exp": 85},
-            "Temple Ruins": {"mob_name": "Ancient Guardian", "difficulty_multiplier": 1.9, "base_exp": 90}
+            "Glistening Grove": {"mob_name": "Slime", "difficulty_multiplier": 0.8, "base_exp": 40},
+            "Crimson Cavern": {"mob_name": "Goblin", "difficulty_multiplier": 1.0, "base_exp": 80},
+            "Darkened Depths": {"mob_name": "Shadow Beast", "difficulty_multiplier": 1.2, "base_exp": 120},
+            "Abandoned Sewers": {"mob_name": "Rat", "difficulty_multiplier": 0.6, "base_exp": 30},
+            "Webbed Forest": {"mob_name": "Spider", "difficulty_multiplier": 0.7, "base_exp": 50},
+            "Ancient Catacombs": {"mob_name": "Skeleton", "difficulty_multiplier": 1.1, "base_exp": 90},
+            "Forbidden Library": {"mob_name": "Dark Mage", "difficulty_multiplier": 1.3, "base_exp": 110},
+            "Crystal Mines": {"mob_name": "Stone Golem", "difficulty_multiplier": 1.4, "base_exp": 130},
+            "Windswept Peaks": {"mob_name": "Harpy", "difficulty_multiplier": 1.2, "base_exp": 100},
+            "Moonlit Grove": {"mob_name": "Werewolf", "difficulty_multiplier": 1.5, "base_exp": 140},
+            "Dragon's Roost": {"mob_name": "Dragon Wyrmling", "difficulty_multiplier": 1.7, "base_exp": 160},
+            "Cursed Sanctum": {"mob_name": "Lich", "difficulty_multiplier": 1.8, "base_exp": 170},
+            "Temple Ruins": {"mob_name": "Ancient Guardian", "difficulty_multiplier": 1.9, "base_exp": 180}
         }
         print("\nAvailable Locations:")
         for i, (loc, data) in enumerate(farming_locations.items(), 1):
